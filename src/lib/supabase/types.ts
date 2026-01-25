@@ -704,6 +704,38 @@ export interface Database {
           updated_at?: string
         }
       }
+      admins: {
+        Row: {
+          id: string
+          email: string
+          role: 'super_admin' | 'admin' | 'viewer'
+          invited_by: string | null
+          invited_at: string
+          last_login_at: string | null
+          is_active: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          email: string
+          role?: 'super_admin' | 'admin' | 'viewer'
+          invited_by?: string | null
+          invited_at?: string
+          last_login_at?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          email?: string
+          role?: 'super_admin' | 'admin' | 'viewer'
+          invited_by?: string | null
+          invited_at?: string
+          last_login_at?: string | null
+          is_active?: boolean
+          created_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -739,3 +771,4 @@ export type Integration = Tables<'integrations'>
 export type Alert = Tables<'alerts'>
 export type DriveLink = Tables<'drive_links'>
 export type SavedScenario = Tables<'saved_scenarios'>
+export type Admin = Tables<'admins'>

@@ -361,9 +361,126 @@ CREATE TRIGGER update_saved_scenarios_updated_at
     EXECUTE FUNCTION update_updated_at_column();
 
 -- =====================
--- ROW LEVEL SECURITY (Optional - enable as needed)
+-- ADMIN USERS
 -- =====================
 
--- ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
--- ALTER TABLE fee_structures ENABLE ROW LEVEL SECURITY;
--- etc.
+-- Admin users table (controls who can access the platform)
+CREATE TABLE IF NOT EXISTS admins (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  email TEXT UNIQUE NOT NULL,
+  role TEXT DEFAULT 'admin' CHECK (role IN ('super_admin', 'admin', 'viewer')),
+  invited_by UUID REFERENCES admins(id),
+  invited_at TIMESTAMPTZ DEFAULT NOW(),
+  last_login_at TIMESTAMPTZ,
+  is_active BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Insert the super admin (Cole)
+INSERT INTO admins (email, role)
+VALUES ('cole@sweetdreamsmusic.com', 'super_admin')
+ON CONFLICT (email) DO NOTHING;
+
+-- Index for quick email lookups
+CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);
+
+-- =====================
+-- ROW LEVEL SECURITY
+-- =====================
+
+-- Enable RLS on all tables
+ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fee_structures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fee_tiers ENABLE ROW LEVEL SECURITY;
+ALTER TABLE trailing_revenue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_revenue ENABLE ROW LEVEL SECURITY;
+ALTER TABLE internal_payouts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE lead_sources ENABLE ROW LEVEL SECURITY;
+ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
+ALTER TABLE daily_metrics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_analytics ENABLE ROW LEVEL SECURITY;
+ALTER TABLE activity_log ENABLE ROW LEVEL SECURITY;
+ALTER TABLE monthly_activity ENABLE ROW LEVEL SECURITY;
+ALTER TABLE integrations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE drive_links ENABLE ROW LEVEL SECURITY;
+ALTER TABLE saved_scenarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
+
+-- Policy: Only authenticated admins can access data
+CREATE POLICY "Admins can view all data" ON clients
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE admins.email = auth.jwt() ->> 'email'
+      AND admins.is_active = TRUE
+    )
+  );
+
+-- Apply same policy to all tables (simplified - you can make these more granular)
+CREATE POLICY "Admins access" ON fee_structures FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON fee_tiers FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON trailing_revenue FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON monthly_revenue FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON internal_payouts FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON lead_sources FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON leads FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON daily_metrics FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON monthly_analytics FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON activity_log FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON monthly_activity FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON integrations FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON alerts FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON drive_links FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON saved_scenarios FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+
+-- Admins table: users can only see themselves, super_admin can see all
+CREATE POLICY "View own admin record" ON admins
+  FOR SELECT USING (
+    email = auth.jwt() ->> 'email'
+    OR EXISTS (
+      SELECT 1 FROM admins
+      WHERE email = auth.jwt() ->> 'email'
+      AND role = 'super_admin'
+    )
+  );
+
+-- Only super_admin can insert/update/delete admins
+CREATE POLICY "Super admin manages admins" ON admins
+  FOR ALL USING (
+    EXISTS (
+      SELECT 1 FROM admins
+      WHERE email = auth.jwt() ->> 'email'
+      AND role = 'super_admin'
+    )
+  );
