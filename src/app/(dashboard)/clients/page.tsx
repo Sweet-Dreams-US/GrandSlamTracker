@@ -1,19 +1,20 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Filter } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
 import ClientTable from '@/components/dashboard/ClientTable'
+import { getClientsWithMetrics, type ClientWithMetrics } from '@/lib/services'
 
-// Demo data
-const DEMO_CLIENTS = [
+// Demo data fallback
+const DEMO_CLIENTS: ClientWithMetrics[] = [
   {
-    id: '1',
+    id: 'demo-1',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     business_name: 'Acme Remodeling',
     display_name: 'Acme',
-    status: 'active' as const,
+    status: 'active',
     industry: 'remodeling',
     business_age_years: 5,
     primary_contact_name: 'John Smith',
@@ -21,20 +22,22 @@ const DEMO_CLIENTS = [
     primary_contact_phone: '555-0100',
     website_url: 'https://acme-remodeling.com',
     notes: null,
+    metricool_brand_id: null,
+    metricool_brand_name: null,
     monthlyRevenue: 85000,
     baseline: 70000,
     upliftPercent: 21.4,
     fee: 2250,
-    healthGrade: 'A' as const,
+    healthGrade: 'A',
     alertCount: 0,
   },
   {
-    id: '2',
+    id: 'demo-2',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     business_name: 'Peak Fitness Center',
     display_name: 'Peak Fitness',
-    status: 'active' as const,
+    status: 'active',
     industry: 'fitness',
     business_age_years: 3,
     primary_contact_name: 'Sarah Johnson',
@@ -42,20 +45,22 @@ const DEMO_CLIENTS = [
     primary_contact_phone: '555-0200',
     website_url: 'https://peakfitness.com',
     notes: null,
+    metricool_brand_id: null,
+    metricool_brand_name: null,
     monthlyRevenue: 42000,
     baseline: 35000,
     upliftPercent: 20.0,
     fee: 1050,
-    healthGrade: 'B' as const,
+    healthGrade: 'B',
     alertCount: 1,
   },
   {
-    id: '3',
+    id: 'demo-3',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     business_name: 'Smith & Associates Law',
     display_name: 'S&A Law',
-    status: 'trial' as const,
+    status: 'trial',
     industry: 'legal',
     business_age_years: 12,
     primary_contact_name: 'Michael Smith',
@@ -63,20 +68,22 @@ const DEMO_CLIENTS = [
     primary_contact_phone: '555-0300',
     website_url: 'https://salaw.com',
     notes: null,
+    metricool_brand_id: null,
+    metricool_brand_name: null,
     monthlyRevenue: 65000,
     baseline: 62000,
     upliftPercent: 4.8,
     fee: 480,
-    healthGrade: 'C' as const,
+    healthGrade: 'C',
     alertCount: 2,
   },
   {
-    id: '4',
+    id: 'demo-4',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     business_name: 'Coastal HVAC Services',
     display_name: 'Coastal HVAC',
-    status: 'paused' as const,
+    status: 'paused',
     industry: 'hvac',
     business_age_years: 8,
     primary_contact_name: 'David Lee',
@@ -84,11 +91,13 @@ const DEMO_CLIENTS = [
     primary_contact_phone: '555-0400',
     website_url: 'https://coastalhvac.com',
     notes: null,
+    metricool_brand_id: null,
+    metricool_brand_name: null,
     monthlyRevenue: 0,
     baseline: 55000,
     upliftPercent: 0,
     fee: 0,
-    healthGrade: 'D' as const,
+    healthGrade: 'D',
     alertCount: 0,
   },
 ]
@@ -96,7 +105,39 @@ const DEMO_CLIENTS = [
 export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
-  const [clients] = useState(DEMO_CLIENTS)
+  const [clients, setClients] = useState<ClientWithMetrics[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [usingDemoData, setUsingDemoData] = useState(false)
+
+  const loadClients = async () => {
+    try {
+      const data = await getClientsWithMetrics()
+      if (data.length === 0) {
+        setClients(DEMO_CLIENTS)
+        setUsingDemoData(true)
+      } else {
+        setClients(data)
+        setUsingDemoData(false)
+      }
+    } catch (error) {
+      console.error('Error loading clients:', error)
+      setClients(DEMO_CLIENTS)
+      setUsingDemoData(true)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadClients()
+  }, [])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadClients()
+  }
 
   const filteredClients = clients.filter((client) => {
     const matchesSearch =
@@ -109,6 +150,14 @@ export default function ClientsPage() {
     return matchesSearch && matchesStatus
   })
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -117,12 +166,27 @@ export default function ClientsPage() {
           <h1 className="page-title">Clients</h1>
           <p className="page-description">
             Manage your client portfolio
+            {usingDemoData && (
+              <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                Demo Data
+              </span>
+            )}
           </p>
         </div>
-        <Link href="/clients/new" className="btn-primary">
-          <Plus className="h-4 w-4 mr-2" />
-          Add Client
-        </Link>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <Link href="/clients/new" className="btn-primary">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Client
+          </Link>
+        </div>
       </div>
 
       {/* Filters */}
@@ -150,10 +214,12 @@ export default function ClientsPage() {
             >
               <option value="all">All Status</option>
               <option value="prospect">Prospect</option>
+              <option value="negotiation">Negotiation</option>
               <option value="trial">Trial</option>
               <option value="active">Active</option>
               <option value="paused">Paused</option>
               <option value="terminated">Terminated</option>
+              <option value="management">Management</option>
             </select>
           </div>
         </div>

@@ -1,15 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { AlertCircle, AlertTriangle, Info, Check, Filter } from 'lucide-react'
+import { AlertCircle, AlertTriangle, Info, Check, Filter, RefreshCw } from 'lucide-react'
+import { getAlerts, acknowledgeAlert, getClientsWithMetrics } from '@/lib/services'
 import type { Alert } from '@/lib/supabase/types'
 
-// Demo data
-const DEMO_ALERTS: (Alert & { clientName: string })[] = [
+// Extended alert type with client name
+interface AlertWithClient extends Alert {
+  clientName: string
+}
+
+// Demo data fallback
+const DEMO_ALERTS: AlertWithClient[] = [
   {
-    id: '1',
-    client_id: '2',
+    id: 'demo-1',
+    client_id: 'demo-2',
     clientName: 'Peak Fitness Center',
     alert_type: 'low_attribution',
     severity: 'warning',
@@ -18,11 +24,11 @@ const DEMO_ALERTS: (Alert & { clientName: string })[] = [
     acknowledged: false,
     acknowledged_at: null,
     acknowledged_by: null,
-    created_at: '2024-12-15T10:00:00Z',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
   },
   {
-    id: '2',
-    client_id: '3',
+    id: 'demo-2',
+    client_id: 'demo-3',
     clientName: 'Smith & Associates Law',
     alert_type: 'trial_ending',
     severity: 'info',
@@ -31,11 +37,11 @@ const DEMO_ALERTS: (Alert & { clientName: string })[] = [
     acknowledged: false,
     acknowledged_at: null,
     acknowledged_by: null,
-    created_at: '2024-12-14T09:00:00Z',
+    created_at: new Date(Date.now() - 172800000).toISOString(),
   },
   {
-    id: '3',
-    client_id: '3',
+    id: 'demo-3',
+    client_id: 'demo-3',
     clientName: 'Smith & Associates Law',
     alert_type: 'low_uplift',
     severity: 'warning',
@@ -44,40 +50,82 @@ const DEMO_ALERTS: (Alert & { clientName: string })[] = [
     acknowledged: false,
     acknowledged_at: null,
     acknowledged_by: null,
-    created_at: '2024-12-13T14:00:00Z',
+    created_at: new Date(Date.now() - 259200000).toISOString(),
   },
   {
-    id: '4',
-    client_id: '1',
+    id: 'demo-4',
+    client_id: 'demo-1',
     clientName: 'Acme Remodeling',
     alert_type: 'payment_outstanding',
     severity: 'critical',
     title: 'Payment Outstanding',
     message: 'October payment of $2,250 is 30 days overdue. Follow up immediately.',
     acknowledged: true,
-    acknowledged_at: '2024-12-10T11:00:00Z',
+    acknowledged_at: new Date(Date.now() - 432000000).toISOString(),
     acknowledged_by: 'team',
-    created_at: '2024-12-05T08:00:00Z',
+    created_at: new Date(Date.now() - 864000000).toISOString(),
   },
   {
-    id: '5',
-    client_id: '1',
+    id: 'demo-5',
+    client_id: 'demo-1',
     clientName: 'Acme Remodeling',
     alert_type: 'high_growth',
     severity: 'info',
     title: 'Exceptional Growth',
     message: 'Revenue is up 25% this month. Great job! Consider case study opportunity.',
     acknowledged: true,
-    acknowledged_at: '2024-12-08T15:00:00Z',
+    acknowledged_at: new Date(Date.now() - 604800000).toISOString(),
     acknowledged_by: 'team',
-    created_at: '2024-12-01T10:00:00Z',
+    created_at: new Date(Date.now() - 1209600000).toISOString(),
   },
 ]
 
 export default function AlertsPage() {
-  const [alerts, setAlerts] = useState(DEMO_ALERTS)
+  const [alerts, setAlerts] = useState<AlertWithClient[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [usingDemoData, setUsingDemoData] = useState(false)
   const [filter, setFilter] = useState<'all' | 'active' | 'acknowledged'>('active')
   const [severityFilter, setSeverityFilter] = useState<'all' | 'critical' | 'warning' | 'info'>('all')
+
+  const loadData = async () => {
+    try {
+      const [alertsData, clientsData] = await Promise.all([
+        getAlerts(),
+        getClientsWithMetrics(),
+      ])
+
+      if (alertsData.length === 0) {
+        setAlerts(DEMO_ALERTS)
+        setUsingDemoData(true)
+      } else {
+        // Map client names to alerts
+        const clientMap = new Map(clientsData.map((c) => [c.id, c.display_name || c.business_name]))
+        const alertsWithClients: AlertWithClient[] = alertsData.map((alert) => ({
+          ...alert,
+          clientName: clientMap.get(alert.client_id) || 'Unknown Client',
+        }))
+        setAlerts(alertsWithClients)
+        setUsingDemoData(false)
+      }
+    } catch (error) {
+      console.error('Error loading alerts:', error)
+      setAlerts(DEMO_ALERTS)
+      setUsingDemoData(true)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadData()
+  }, [])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadData()
+  }
 
   const filteredAlerts = alerts.filter((alert) => {
     const matchesStatus =
@@ -90,24 +138,53 @@ export default function AlertsPage() {
     return matchesStatus && matchesSeverity
   })
 
-  const handleAcknowledge = (alertId: string) => {
-    setAlerts((prev) =>
-      prev.map((a) =>
-        a.id === alertId
-          ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
-          : a
+  const handleAcknowledge = async (alertId: string) => {
+    if (usingDemoData) {
+      setAlerts((prev) =>
+        prev.map((a) =>
+          a.id === alertId
+            ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
+            : a
+        )
       )
-    )
+    } else {
+      const result = await acknowledgeAlert(alertId)
+      if (result.success) {
+        setAlerts((prev) =>
+          prev.map((a) =>
+            a.id === alertId
+              ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
+              : a
+          )
+        )
+      }
+    }
   }
 
-  const handleAcknowledgeAll = () => {
-    setAlerts((prev) =>
-      prev.map((a) =>
-        !a.acknowledged
-          ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
-          : a
+  const handleAcknowledgeAll = async () => {
+    const activeAlerts = alerts.filter((a) => !a.acknowledged)
+
+    if (usingDemoData) {
+      setAlerts((prev) =>
+        prev.map((a) =>
+          !a.acknowledged
+            ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
+            : a
+        )
       )
-    )
+    } else {
+      // Acknowledge all in parallel
+      await Promise.all(
+        activeAlerts.map((alert) => acknowledgeAlert(alert.id))
+      )
+      setAlerts((prev) =>
+        prev.map((a) =>
+          !a.acknowledged
+            ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
+            : a
+        )
+      )
+    }
   }
 
   const getIcon = (severity: string) => {
@@ -135,6 +212,14 @@ export default function AlertsPage() {
   const activeCount = alerts.filter((a) => !a.acknowledged).length
   const criticalCount = alerts.filter((a) => !a.acknowledged && a.severity === 'critical').length
 
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -143,14 +228,29 @@ export default function AlertsPage() {
           <h1 className="page-title">Alerts</h1>
           <p className="page-description">
             {activeCount} active alerts{criticalCount > 0 && `, ${criticalCount} critical`}
+            {usingDemoData && (
+              <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                Demo Data
+              </span>
+            )}
           </p>
         </div>
-        {activeCount > 0 && (
-          <button onClick={handleAcknowledgeAll} className="btn-secondary">
-            <Check className="h-4 w-4 mr-2" />
-            Acknowledge All
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
-        )}
+          {activeCount > 0 && (
+            <button onClick={handleAcknowledgeAll} className="btn-secondary">
+              <Check className="h-4 w-4 mr-2" />
+              Acknowledge All
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filters */}
@@ -160,7 +260,7 @@ export default function AlertsPage() {
             <Filter className="h-4 w-4 text-gray-400" />
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value as any)}
+              onChange={(e) => setFilter(e.target.value as 'all' | 'active' | 'acknowledged')}
               className="input w-auto"
             >
               <option value="all">All Alerts</option>
@@ -170,7 +270,7 @@ export default function AlertsPage() {
           </div>
           <select
             value={severityFilter}
-            onChange={(e) => setSeverityFilter(e.target.value as any)}
+            onChange={(e) => setSeverityFilter(e.target.value as 'all' | 'critical' | 'warning' | 'info')}
             className="input w-auto"
           >
             <option value="all">All Severity</option>

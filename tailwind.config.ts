@@ -9,6 +9,18 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        monster: {
+          50: '#f5f0fa',
+          100: '#ede5f3',
+          200: '#c4a6d7',
+          300: '#b08ec5',
+          400: '#9a73b3',
+          500: '#8558a0',
+          600: '#6c4685',
+          700: '#5f377b',
+          800: '#512d6d',
+          900: '#4a1179',
+        },
         primary: {
           50: '#f0f9ff',
           100: '#e0f2fe',

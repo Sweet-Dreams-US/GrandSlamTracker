@@ -1,7 +1,8 @@
 'use client'
 
 import { useState } from 'react'
-import { Save, Key, Database, Bell, Palette } from 'lucide-react'
+import { Save, Key, Database, Bell, Palette, Link2, Users } from 'lucide-react'
+import Link from 'next/link'
 
 export default function SettingsPage() {
   const [activeTab, setActiveTab] = useState('general')
@@ -211,6 +212,46 @@ export default function SettingsPage() {
 
         {activeTab === 'api' && (
           <div className="space-y-6">
+            {/* Quick Links to Other Settings */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <Link
+                href="/settings/integrations"
+                className="card p-6 hover:border-blue-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-orange-400 to-pink-500 rounded-xl flex items-center justify-center">
+                    <Link2 className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-600">
+                      Metricool Integration
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Connect brands and sync analytics
+                    </p>
+                  </div>
+                </div>
+              </Link>
+              <Link
+                href="/settings/admins"
+                className="card p-6 hover:border-blue-300 hover:shadow-md transition-all group"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center">
+                    <Users className="w-6 h-6 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 group-hover:text-blue-600">
+                      Admin Users
+                    </h3>
+                    <p className="text-sm text-gray-500">
+                      Manage who can access the platform
+                    </p>
+                  </div>
+                </div>
+              </Link>
+            </div>
+
             <div className="card p-6">
               <h3 className="section-title">Supabase</h3>
               <div className="space-y-4">

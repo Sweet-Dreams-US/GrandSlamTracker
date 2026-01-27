@@ -100,19 +100,63 @@ export const GROWTH_TIERS: GrowthTier[] = [
   { tierNumber: 8, growthFloor: 10.00, growthCeiling: 999.99, label: '1001%+' },
 ]
 
-// Growth Fee Rates by Category and Tier
-export const GROWTH_FEE_RATES: Record<BusinessSizeCategory, number[]> = {
+// Year 2+ Standard Growth Fee Rates by Category and Tier
+export const YEAR2_GROWTH_FEE_RATES: Record<BusinessSizeCategory, number[]> = {
   //           Tier1  Tier2  Tier3  Tier4  Tier5  Tier6  Tier7  Tier8
-  micro:      [0.10,  0.15,  0.20,  0.18,  0.15,  0.12,  0.10,  0.08],
-  small:      [0.08,  0.12,  0.16,  0.14,  0.12,  0.10,  0.08,  0.06],
-  medium:     [0.06,  0.09,  0.12,  0.10,  0.08,  0.07,  0.06,  0.05],
-  large:      [0.05,  0.07,  0.09,  0.08,  0.07,  0.06,  0.05,  0.04],
-  major:      [0.04,  0.055, 0.07,  0.06,  0.05,  0.045, 0.04,  0.035],
-  enterprise: [0.03,  0.04,  0.05,  0.045, 0.04,  0.035, 0.03,  0.025],
-  elite:      [0.025, 0.03,  0.04,  0.035, 0.03,  0.025, 0.02,  0.015],
+  micro:      [0.20,  0.25,  0.30,  0.28,  0.25,  0.22,  0.20,  0.18],
+  small:      [0.15,  0.20,  0.25,  0.22,  0.20,  0.18,  0.15,  0.12],
+  medium:     [0.10,  0.14,  0.18,  0.16,  0.14,  0.12,  0.10,  0.08],
+  large:      [0.08,  0.11,  0.14,  0.12,  0.10,  0.09,  0.08,  0.07],
+  major:      [0.06,  0.08,  0.10,  0.09,  0.08,  0.07,  0.06,  0.05],
+  enterprise: [0.04,  0.055, 0.07,  0.06,  0.05,  0.045, 0.04,  0.035],
+  elite:      [0.03,  0.04,  0.05,  0.045, 0.04,  0.035, 0.03,  0.025],
 }
 
-// Industry Growth Factors (for baseline reset calculation)
+// Year 1 Premium Growth Fee Rates (higher to compensate for no Foundation/Sustaining fees in Grand Slam)
+export const YEAR1_GROWTH_FEE_RATES: Record<BusinessSizeCategory, number[]> = {
+  //           Tier1  Tier2  Tier3  Tier4  Tier5  Tier6  Tier7  Tier8
+  micro:      [0.25,  0.30,  0.35,  0.33,  0.30,  0.27,  0.25,  0.22],
+  small:      [0.20,  0.25,  0.30,  0.27,  0.25,  0.22,  0.20,  0.17],
+  medium:     [0.15,  0.19,  0.23,  0.21,  0.19,  0.16,  0.14,  0.12],
+  large:      [0.12,  0.15,  0.18,  0.16,  0.14,  0.12,  0.11,  0.10],
+  major:      [0.09,  0.12,  0.14,  0.12,  0.11,  0.10,  0.09,  0.08],
+  enterprise: [0.06,  0.08,  0.10,  0.09,  0.08,  0.07,  0.06,  0.05],
+  elite:      [0.05,  0.06,  0.07,  0.065, 0.06,  0.05,  0.045, 0.04],
+}
+
+// Backward-compat alias
+export const GROWTH_FEE_RATES = YEAR2_GROWTH_FEE_RATES
+
+// Growth-Based Retention Brackets (for baseline reset)
+export interface RetentionBracket {
+  label: string
+  minGrowth: number  // decimal, inclusive
+  maxGrowth: number  // decimal, exclusive (Infinity for last)
+  retentionRate: number
+}
+
+export const RETENTION_BRACKETS: RetentionBracket[] = [
+  { label: '0-25%',   minGrowth: 0.00, maxGrowth: 0.26, retentionRate: 0.20 },
+  { label: '26-50%',  minGrowth: 0.26, maxGrowth: 0.51, retentionRate: 0.30 },
+  { label: '51-75%',  minGrowth: 0.51, maxGrowth: 0.76, retentionRate: 0.40 },
+  { label: '76-100%', minGrowth: 0.76, maxGrowth: 1.01, retentionRate: 0.50 },
+  { label: '101%+',   minGrowth: 1.01, maxGrowth: Infinity, retentionRate: 0.60 },
+]
+
+/**
+ * Get retention rate based on average growth percentage (decimal).
+ * Replaces the old option-based retention system.
+ */
+export function getRetentionRateByGrowth(growthPercent: number): number {
+  for (const bracket of RETENTION_BRACKETS) {
+    if (growthPercent < bracket.maxGrowth) {
+      return bracket.retentionRate
+    }
+  }
+  return RETENTION_BRACKETS[RETENTION_BRACKETS.length - 1].retentionRate
+}
+
+// Industry Growth Factors (kept for reference / other uses, NOT used in baseline reset anymore)
 export const INDUSTRY_GROWTH_FACTORS: Record<string, number> = {
   remodeling: 1.12,
   homeServices: 1.10,
@@ -126,16 +170,20 @@ export const INDUSTRY_GROWTH_FACTORS: Record<string, number> = {
   automotive: 1.05,
   beauty: 1.04,
   fitness: 1.08,
+  sim_racing: 1.18,
+  esports: 1.20,
+  gaming_center: 1.15,
+  events: 1.10,
   default: 1.06,
 }
 
-// Baseline Retention Options (for baseline reset)
+// Legacy Baseline Retention Options (kept for backward compat)
 export type RetentionOption = 'conservative' | 'moderate' | 'aggressive'
 
 export const RETENTION_RATES: Record<RetentionOption, number> = {
-  conservative: 0.25, // Keep 25% of growth
-  moderate: 0.35,     // Keep 35% of growth (default)
-  aggressive: 0.50,   // Keep 50% of growth
+  conservative: 0.25,
+  moderate: 0.35,
+  aggressive: 0.50,
 }
 
 // Client Tiers for eligibility
@@ -218,10 +266,11 @@ export function getFoundationFeeRate(category: BusinessSizeCategory): number {
 }
 
 /**
- * Get growth fee rate for a category and tier
+ * Get growth fee rate for a category and tier.
+ * Year 1 uses premium rates, Year 2+ uses standard rates.
  */
-export function getGrowthFeeRate(category: BusinessSizeCategory, tierNumber: number): number {
-  const rates = GROWTH_FEE_RATES[category]
+export function getGrowthFeeRate(category: BusinessSizeCategory, tierNumber: number, isYear1: boolean = false): number {
+  const rates = isYear1 ? YEAR1_GROWTH_FEE_RATES[category] : YEAR2_GROWTH_FEE_RATES[category]
   return rates[tierNumber - 1] || 0
 }
 
@@ -233,17 +282,18 @@ export function getIndustryGrowthFactor(industry: string): number {
 }
 
 /**
- * Get retention rate
+ * Get retention rate (legacy option-based)
  */
 export function getRetentionRate(option: RetentionOption): number {
   return RETENTION_RATES[option]
 }
 
 /**
- * Get all tier info with rates for a category
+ * Get all tier info with rates for a category.
+ * Year 1 uses premium rates, Year 2+ uses standard rates.
  */
-export function getTiersWithRates(category: BusinessSizeCategory): (GrowthTier & { feeRate: number })[] {
-  const rates = GROWTH_FEE_RATES[category]
+export function getTiersWithRates(category: BusinessSizeCategory, isYear1: boolean = false): (GrowthTier & { feeRate: number })[] {
+  const rates = isYear1 ? YEAR1_GROWTH_FEE_RATES[category] : YEAR2_GROWTH_FEE_RATES[category]
   return GROWTH_TIERS.map((tier, index) => ({
     ...tier,
     feeRate: rates[index],
@@ -261,18 +311,16 @@ export function getClientTier(monthlyBaseline: number, expectedGrowth: number): 
 }
 
 /**
- * Calculate new baseline after reset
- * Formula: New Baseline = Old × Industry Factor × (1 + Growth% × Retention%)
+ * Calculate new baseline after reset (simplified formula).
+ * New Baseline = Old Baseline + (Avg Monthly Uplift × Retention%)
+ * Retention is determined by growth-based brackets (no industry factor).
  */
 export function calculateNewBaseline(
   oldBaseline: number,
-  growthPercent: number,
-  industry: string,
-  retentionOption: RetentionOption = 'moderate'
+  avgMonthlyUplift: number,
+  avgGrowthPercent: number
 ): number {
-  const industryFactor = getIndustryGrowthFactor(industry)
-  const retentionRate = getRetentionRate(retentionOption)
-
-  const newBaseline = oldBaseline * industryFactor * (1 + growthPercent * retentionRate)
+  const retentionRate = getRetentionRateByGrowth(avgGrowthPercent)
+  const newBaseline = oldBaseline + (avgMonthlyUplift * retentionRate)
   return Math.round(newBaseline)
 }

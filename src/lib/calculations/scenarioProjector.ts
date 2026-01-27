@@ -21,7 +21,6 @@ import {
   getBusinessSizeCategory,
   getTiersWithRates,
   calculateNewBaseline,
-  getIndustryGrowthFactor,
   type RetentionOption,
 } from '../constants/feeStructure'
 
@@ -130,7 +129,6 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
     startYear,
     projectionMonths,
     applySeasonality = true,
-    retentionOption = 'moderate',
     isGrandSlam = true,
   } = input
 
@@ -156,6 +154,7 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
   let yearSustainingFees = 0
   let yearGrowthFees = 0
   let yearGrowthSum = 0
+  let yearUpliftSum = 0
   let monthsInYear = 0
   let lastYearAvgMonthlyFee = 0
 
@@ -185,13 +184,13 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
         avgMonthlyFee: yearAvgMonthlyFee,
       })
 
-      // Calculate new baseline for Year 2+
+      // Calculate new baseline for Year 2+ (simplified: no industry factor)
       const avgGrowthPercent = yearGrowthSum / monthsInYear
+      const avgMonthlyUplift = yearUpliftSum / monthsInYear
       const newBaseline = calculateNewBaseline(
         currentBaseline,
-        avgGrowthPercent,
-        industry,
-        retentionOption
+        avgMonthlyUplift,
+        avgGrowthPercent
       )
 
       // Calculate sustaining fee (protects last year's average)
@@ -222,6 +221,7 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
       yearSustainingFees = 0
       yearGrowthFees = 0
       yearGrowthSum = 0
+      yearUpliftSum = 0
       monthsInYear = 0
     }
 
@@ -232,7 +232,14 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
 
     // Calculate fees
     const isYear1 = currentYearNumber === 1
-    const growth = calculateGrowthFee(currentBaseline, projectedRevenue)
+
+    // Year 1: adjust baseline by seasonal factor before calculating growth fees
+    // Year 2+: flat baseline (year-over-year), seasonality only affects projected revenue
+    const feeBaseline = isYear1 && applySeasonality
+      ? round2(currentBaseline * seasonalIndex)
+      : currentBaseline
+
+    const growth = calculateGrowthFee(feeBaseline, projectedRevenue, isYear1)
 
     // Foundation fee (monthly portion) - can be $0 for Grand Slam Year 1
     const foundation = calculateFoundationFee(currentBaseline)
@@ -256,6 +263,7 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
     yearSustainingFees += sustainingFee
     yearGrowthFees += growth.growthFee
     yearGrowthSum += growth.growthPercentage
+    yearUpliftSum += growth.upliftAmount
     monthsInYear++
 
     projections.push({

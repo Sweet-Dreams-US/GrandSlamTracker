@@ -31,10 +31,12 @@ export default function ClientTable({ clients }: ClientTableProps) {
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
       prospect: 'badge-gray',
+      negotiation: 'badge-yellow',
       trial: 'badge-info',
       active: 'badge-success',
       paused: 'badge-warning',
       terminated: 'badge-danger',
+      management: 'badge-purple',
     }
     return styles[status] || 'badge-gray'
   }

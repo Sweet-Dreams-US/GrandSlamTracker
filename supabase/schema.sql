@@ -15,14 +15,18 @@ CREATE TABLE IF NOT EXISTS clients (
   updated_at TIMESTAMPTZ DEFAULT NOW(),
   business_name TEXT NOT NULL,
   display_name TEXT,
-  status TEXT DEFAULT 'prospect' CHECK (status IN ('prospect', 'trial', 'active', 'paused', 'terminated')),
+  status TEXT DEFAULT 'prospect' CHECK (status IN ('prospect', 'negotiation', 'trial', 'active', 'paused', 'terminated', 'management')),
+  -- management = fixed fee/retainer clients (not Grand Slam performance-based)
   industry TEXT NOT NULL,
   business_age_years INTEGER,
   primary_contact_name TEXT,
   primary_contact_email TEXT,
   primary_contact_phone TEXT,
   website_url TEXT,
-  notes TEXT
+  notes TEXT,
+  -- Metricool integration
+  metricool_brand_id INTEGER,
+  metricool_brand_name TEXT
 );
 
 -- Fee structures table
@@ -380,6 +384,35 @@ CREATE TABLE IF NOT EXISTS admins (
 INSERT INTO admins (email, role)
 VALUES ('cole@sweetdreamsmusic.com', 'super_admin')
 ON CONFLICT (email) DO NOTHING;
+
+-- =====================
+-- SEED DATA: CLIENTS
+-- =====================
+
+-- MC Racing (Sim Racing - Fort Wayne, IN)
+INSERT INTO clients (
+  business_name,
+  display_name,
+  status,
+  industry,
+  business_age_years,
+  primary_contact_name,
+  primary_contact_email,
+  primary_contact_phone,
+  website_url,
+  notes
+) VALUES (
+  'MC Racing',
+  'MC Racing',
+  'prospect',
+  'sim_racing',
+  2,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  'Only sim racing facility in Fort Wayne, IN. Open Noon-2am Tue-Sun, closed Mondays (84 hrs/week). Current revenue $3,500-$5,000/mo. Revenue mix: 87% sessions, 13% parties, 0% recurring. Grand Slam candidate targeting 300%+ growth.'
+) ON CONFLICT DO NOTHING;
 
 -- Index for quick email lookups
 CREATE INDEX IF NOT EXISTS idx_admins_email ON admins(email);

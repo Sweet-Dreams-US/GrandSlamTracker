@@ -10,6 +10,7 @@ import {
   Bell,
   Settings,
   TrendingUp,
+  FlaskConical,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 
@@ -19,6 +20,11 @@ const navigation = [
   { name: 'Financials', href: '/financials', icon: DollarSign },
   { name: 'Scenarios', href: '/scenarios', icon: Calculator },
   { name: 'Alerts', href: '/alerts', icon: Bell },
+]
+
+const testClients = [
+  { name: 'Monster Remodeling', href: '/test-clients/monster' },
+  { name: 'MC Racing', href: '/test-clients/mc-racing' },
 ]
 
 export default function Sidebar() {
@@ -55,6 +61,31 @@ export default function Sidebar() {
             </Link>
           )
         })}
+
+        {/* Test Clients Divider */}
+        <div className="pt-4 mt-4 border-t border-gray-200">
+          <p className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+            Test Clients
+          </p>
+          {testClients.map((item) => {
+            const isActive = pathname === item.href
+
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <FlaskConical className="h-5 w-5" />
+                {item.name}
+              </Link>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Footer */}

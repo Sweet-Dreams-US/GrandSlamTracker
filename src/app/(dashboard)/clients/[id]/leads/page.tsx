@@ -1,20 +1,21 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
-import { ArrowLeft, Plus, Filter, Search } from 'lucide-react'
+import { ArrowLeft, Plus, Filter, Search, RefreshCw } from 'lucide-react'
 import LeadForm from '@/components/forms/LeadForm'
+import { getLeads, createLead, updateLead } from '@/lib/services'
 import type { Lead } from '@/lib/supabase/types'
 
-// Demo data
+// Demo data fallback
 const DEMO_LEADS: Lead[] = [
   {
-    id: '1',
-    client_id: '1',
+    id: 'demo-1',
+    client_id: 'demo-1',
     lead_source_id: null,
-    created_at: '2024-12-10T10:00:00Z',
-    updated_at: '2024-12-12T14:00:00Z',
+    created_at: new Date(Date.now() - 172800000).toISOString(),
+    updated_at: new Date(Date.now() - 86400000).toISOString(),
     contact_name: 'Robert Wilson',
     contact_phone: '555-1234',
     contact_email: 'robert@email.com',
@@ -28,11 +29,11 @@ const DEMO_LEADS: Lead[] = [
     notes: 'Kitchen remodel project',
   },
   {
-    id: '2',
-    client_id: '1',
+    id: 'demo-2',
+    client_id: 'demo-1',
     lead_source_id: null,
-    created_at: '2024-12-08T09:00:00Z',
-    updated_at: '2024-12-08T09:00:00Z',
+    created_at: new Date(Date.now() - 345600000).toISOString(),
+    updated_at: new Date(Date.now() - 345600000).toISOString(),
     contact_name: 'Jennifer Adams',
     contact_phone: '555-2345',
     contact_email: 'jennifer@email.com',
@@ -46,11 +47,11 @@ const DEMO_LEADS: Lead[] = [
     notes: 'Full bathroom renovation',
   },
   {
-    id: '3',
-    client_id: '1',
+    id: 'demo-3',
+    client_id: 'demo-1',
     lead_source_id: null,
-    created_at: '2024-12-05T11:00:00Z',
-    updated_at: '2024-12-10T16:00:00Z',
+    created_at: new Date(Date.now() - 604800000).toISOString(),
+    updated_at: new Date(Date.now() - 432000000).toISOString(),
     contact_name: 'David Miller',
     contact_phone: '555-3456',
     contact_email: 'david@email.com',
@@ -59,7 +60,7 @@ const DEMO_LEADS: Lead[] = [
     status: 'won',
     estimated_value: 12000,
     final_value: 11500,
-    won_date: '2024-12-10',
+    won_date: new Date(Date.now() - 432000000).toISOString().split('T')[0],
     lost_reason: null,
     notes: 'Basement finishing',
   },
@@ -83,12 +84,46 @@ const SOURCE_COLORS: Record<string, string> = {
 
 export default function LeadsPage() {
   const params = useParams()
-  const [leads, setLeads] = useState(DEMO_LEADS)
+  const clientId = params.id as string
+  const [leads, setLeads] = useState<Lead[]>([])
+  const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [usingDemoData, setUsingDemoData] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingLead, setEditingLead] = useState<Lead | null>(null)
   const [statusFilter, setStatusFilter] = useState('all')
   const [searchQuery, setSearchQuery] = useState('')
-  const [isLoading, setIsLoading] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const loadLeads = async () => {
+    try {
+      const data = await getLeads(clientId)
+      if (data.length === 0) {
+        setLeads(DEMO_LEADS)
+        setUsingDemoData(true)
+      } else {
+        setLeads(data)
+        setUsingDemoData(false)
+      }
+    } catch (err) {
+      console.error('Error loading leads:', err)
+      setLeads(DEMO_LEADS)
+      setUsingDemoData(true)
+    } finally {
+      setLoading(false)
+      setRefreshing(false)
+    }
+  }
+
+  useEffect(() => {
+    loadLeads()
+  }, [clientId])
+
+  const handleRefresh = () => {
+    setRefreshing(true)
+    loadLeads()
+  }
 
   const filteredLeads = leads.filter((lead) => {
     const matchesStatus = statusFilter === 'all' || lead.status === statusFilter
@@ -99,33 +134,70 @@ export default function LeadsPage() {
   })
 
   const handleSubmit = async (data: Partial<Lead>) => {
-    setIsLoading(true)
+    setIsSubmitting(true)
+    setError(null)
+
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500))
-      if (editingLead) {
-        setLeads((prev) =>
-          prev.map((l) => (l.id === editingLead.id ? { ...l, ...data } : l))
-        )
+      if (usingDemoData) {
+        // Handle demo data locally
+        if (editingLead) {
+          setLeads((prev) =>
+            prev.map((l) => (l.id === editingLead.id ? { ...l, ...data } : l))
+          )
+        } else {
+          setLeads((prev) => [
+            {
+              ...data,
+              id: `demo-${Date.now()}`,
+              client_id: clientId,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString(),
+            } as Lead,
+            ...prev,
+          ])
+        }
       } else {
-        setLeads((prev) => [
-          {
+        // Real database operation
+        if (editingLead) {
+          const result = await updateLead(editingLead.id, data)
+          if (result.error) {
+            setError(result.error)
+            return
+          }
+        } else {
+          const result = await createLead({
             ...data,
-            id: Date.now().toString(),
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          } as Lead,
-          ...prev,
-        ])
+            client_id: clientId,
+          } as Omit<Lead, 'id' | 'created_at' | 'updated_at'>)
+          if (result.error) {
+            setError(result.error)
+            return
+          }
+        }
+        // Reload leads after successful save
+        await loadLeads()
       }
+
       setShowForm(false)
       setEditingLead(null)
+    } catch (err) {
+      console.error('Error saving lead:', err)
+      setError('Failed to save lead. Please try again.')
     } finally {
-      setIsLoading(false)
+      setIsSubmitting(false)
     }
   }
 
   const formatCurrency = (value?: number | null) =>
     value ? `$${value.toLocaleString()}` : '-'
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -140,20 +212,44 @@ export default function LeadsPage() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold">Lead Management</h1>
-            <p className="text-sm text-gray-500">Track leads and conversions</p>
+            <p className="text-sm text-gray-500">
+              Track leads and conversions
+              {usingDemoData && (
+                <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
+                  Demo Data
+                </span>
+              )}
+            </p>
           </div>
         </div>
-        <button
-          onClick={() => {
-            setEditingLead(null)
-            setShowForm(true)
-          }}
-          className="btn-primary"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Add Lead
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg disabled:opacity-50"
+            title="Refresh data"
+          >
+            <RefreshCw className={`h-5 w-5 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <button
+            onClick={() => {
+              setEditingLead(null)
+              setShowForm(true)
+            }}
+            className="btn-primary"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Lead
+          </button>
+        </div>
       </div>
+
+      {/* Error message */}
+      {error && (
+        <div className="p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          {error}
+        </div>
+      )}
 
       {/* Lead Form Modal */}
       {showForm && (
@@ -163,14 +259,14 @@ export default function LeadsPage() {
               {editingLead ? 'Edit Lead' : 'Add New Lead'}
             </h2>
             <LeadForm
-              clientId={params.id as string}
+              clientId={clientId}
               lead={editingLead || undefined}
               onSubmit={handleSubmit}
               onCancel={() => {
                 setShowForm(false)
                 setEditingLead(null)
               }}
-              isLoading={isLoading}
+              isLoading={isSubmitting}
             />
           </div>
         </div>

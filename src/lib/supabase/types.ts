@@ -16,7 +16,7 @@ export interface Database {
           updated_at: string
           business_name: string
           display_name: string | null
-          status: 'prospect' | 'trial' | 'active' | 'paused' | 'terminated'
+          status: 'prospect' | 'negotiation' | 'trial' | 'active' | 'paused' | 'terminated' | 'management'
           industry: string
           business_age_years: number | null
           primary_contact_name: string | null
@@ -24,6 +24,8 @@ export interface Database {
           primary_contact_phone: string | null
           website_url: string | null
           notes: string | null
+          metricool_brand_id: number | null
+          metricool_brand_name: string | null
         }
         Insert: {
           id?: string
@@ -31,7 +33,7 @@ export interface Database {
           updated_at?: string
           business_name: string
           display_name?: string | null
-          status?: 'prospect' | 'trial' | 'active' | 'paused' | 'terminated'
+          status?: 'prospect' | 'negotiation' | 'trial' | 'active' | 'paused' | 'terminated' | 'management'
           industry: string
           business_age_years?: number | null
           primary_contact_name?: string | null
@@ -39,6 +41,8 @@ export interface Database {
           primary_contact_phone?: string | null
           website_url?: string | null
           notes?: string | null
+          metricool_brand_id?: number | null
+          metricool_brand_name?: string | null
         }
         Update: {
           id?: string
@@ -46,7 +50,7 @@ export interface Database {
           updated_at?: string
           business_name?: string
           display_name?: string | null
-          status?: 'prospect' | 'trial' | 'active' | 'paused' | 'terminated'
+          status?: 'prospect' | 'negotiation' | 'trial' | 'active' | 'paused' | 'terminated' | 'management'
           industry?: string
           business_age_years?: number | null
           primary_contact_name?: string | null
@@ -54,6 +58,8 @@ export interface Database {
           primary_contact_phone?: string | null
           website_url?: string | null
           notes?: string | null
+          metricool_brand_id?: number | null
+          metricool_brand_name?: string | null
         }
       }
       fee_structures: {

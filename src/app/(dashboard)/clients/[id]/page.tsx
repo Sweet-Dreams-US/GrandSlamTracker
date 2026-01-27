@@ -13,6 +13,7 @@ import {
   Activity,
   FileText,
   Settings,
+  Briefcase,
 } from 'lucide-react'
 import SummaryCard from '@/components/dashboard/SummaryCard'
 import RevenueChart from '@/components/charts/RevenueChart'
@@ -98,6 +99,10 @@ export default function ClientDetailPage() {
           </div>
         </div>
         <div className="flex gap-3">
+          <Link href={`/clients/${params.id}/workspace`} className="btn-secondary">
+            <Briefcase className="h-4 w-4 mr-2" />
+            Workspace
+          </Link>
           <Link href={`/clients/${params.id}/revenue`} className="btn-secondary">
             <DollarSign className="h-4 w-4 mr-2" />
             Enter Revenue

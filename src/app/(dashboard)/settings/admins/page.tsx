@@ -32,7 +32,8 @@ export default function AdminsPage() {
   const checkCurrentUser = async () => {
     const { data: { user } } = await supabase.auth.getUser()
     if (user?.email) {
-      const { data } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
         .from('admins')
         .select('role')
         .eq('email', user.email)
@@ -42,7 +43,8 @@ export default function AdminsPage() {
   }
 
   const loadAdmins = async () => {
-    const { data, error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
       .from('admins')
       .select('*')
       .order('created_at', { ascending: true })
@@ -60,7 +62,8 @@ export default function AdminsPage() {
     setAdding(true)
     setError(null)
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('admins')
       .insert({
         email: newEmail.toLowerCase().trim(),
@@ -83,7 +86,8 @@ export default function AdminsPage() {
   const toggleActive = async (admin: Admin) => {
     if (admin.role === 'super_admin') return
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('admins')
       .update({ is_active: !admin.is_active })
       .eq('id', admin.id)
@@ -97,7 +101,8 @@ export default function AdminsPage() {
     if (admin.role === 'super_admin') return
     if (!confirm(`Remove ${admin.email} as admin?`)) return
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('admins')
       .delete()
       .eq('id', admin.id)

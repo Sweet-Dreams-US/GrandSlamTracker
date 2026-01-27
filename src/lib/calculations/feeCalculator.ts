@@ -13,8 +13,6 @@ import {
   getGrowthFeeRate,
   getFoundationFeeRate,
   getTiersWithRates,
-  calculateNewBaseline,
-  type RetentionOption,
 } from '../constants/feeStructure'
 
 export interface GrowthTierBreakdown {
@@ -99,11 +97,13 @@ export function calculateSustainingFee(
 }
 
 /**
- * Calculate monthly growth fee using tiered system
+ * Calculate monthly growth fee using tiered system.
+ * Year 1 uses premium rates, Year 2+ uses standard rates.
  */
 export function calculateGrowthFee(
   baseline: number,
-  revenue: number
+  revenue: number,
+  isYear1: boolean = false
 ): { growthFee: number; tierBreakdown: GrowthTierBreakdown[]; upliftAmount: number; growthPercentage: number } {
   const category = getBusinessSizeCategory(baseline)
   const upliftAmount = Math.max(0, revenue - baseline)
@@ -129,7 +129,7 @@ export function calculateGrowthFee(
 
     if (growthInTier > 0) {
       const upliftInTier = growthInTier * baseline
-      const feeRate = getGrowthFeeRate(category, tier.tierNumber)
+      const feeRate = getGrowthFeeRate(category, tier.tierNumber, isYear1)
       const feeFromTier = upliftInTier * feeRate
 
       growthFee += feeFromTier
@@ -178,8 +178,8 @@ export function calculateMonthlyFee(
   // Sustaining fee (Year 2+ only)
   const activeSustainingFee = isYear1 ? 0 : sustainingFee
 
-  // Growth fee
-  const growth = calculateGrowthFee(baseline, revenue)
+  // Growth fee (Year 1 uses premium rates)
+  const growth = calculateGrowthFee(baseline, revenue, isYear1)
 
   // Total
   const grossMonthlyFee = foundationFeeMonthly + activeSustainingFee + growth.growthFee
@@ -227,13 +227,13 @@ export function formatGrowthPercentage(growth: number): string {
 /**
  * Get tier rates preview for a given baseline
  */
-export function getTierRatesForBaseline(baseline: number) {
+export function getTierRatesForBaseline(baseline: number, isYear1: boolean = false) {
   const category = getBusinessSizeCategory(baseline)
   const foundation = calculateFoundationFee(baseline)
   return {
     category,
     categoryLabel: getCategoryLabel(category),
-    tiers: getTiersWithRates(category),
+    tiers: getTiersWithRates(category, isYear1),
     foundationFeeRate: getFoundationFeeRate(category),
     foundationFeeAnnual: foundation.foundationFeeAnnual,
     foundationFeeMonthly: foundation.foundationFeeMonthly,

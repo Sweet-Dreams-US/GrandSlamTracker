@@ -1,47 +1,81 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft } from 'lucide-react'
 import ClientForm from '@/components/forms/ClientForm'
+import { getClientById, updateClient } from '@/lib/services'
 import type { Client } from '@/lib/supabase/types'
-
-// Demo data - would come from Supabase
-const DEMO_CLIENT: Client = {
-  id: '1',
-  created_at: new Date().toISOString(),
-  updated_at: new Date().toISOString(),
-  business_name: 'Acme Remodeling',
-  display_name: 'Acme',
-  status: 'active',
-  industry: 'remodeling',
-  business_age_years: 5,
-  primary_contact_name: 'John Smith',
-  primary_contact_email: 'john@acme.com',
-  primary_contact_phone: '555-0100',
-  website_url: 'https://acme-remodeling.com',
-  notes: 'Premium client, great communication.',
-}
 
 export default function EditClientPage() {
   const params = useParams()
   const router = useRouter()
+  const [client, setClient] = useState<Client | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isFetching, setIsFetching] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // In real app, fetch from Supabase
-  const client = DEMO_CLIENT
+  useEffect(() => {
+    const loadClient = async () => {
+      try {
+        const data = await getClientById(params.id as string)
+        if (data) {
+          setClient(data)
+        } else {
+          setError('Client not found')
+        }
+      } catch (err) {
+        console.error('Error loading client:', err)
+        setError('Failed to load client')
+      } finally {
+        setIsFetching(false)
+      }
+    }
+
+    loadClient()
+  }, [params.id])
 
   const handleSubmit = async (data: Partial<Client>) => {
     setIsLoading(true)
+    setError(null)
+
     try {
-      // TODO: Update in Supabase
-      console.log('Updating client:', params.id, data)
-      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const result = await updateClient(params.id as string, data)
+
+      if (result.error) {
+        setError(result.error)
+        return
+      }
+
       router.push(`/clients/${params.id}`)
+    } catch (err) {
+      console.error('Error updating client:', err)
+      setError('An unexpected error occurred. Please try again.')
     } finally {
       setIsLoading(false)
     }
+  }
+
+  if (isFetching) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+      </div>
+    )
+  }
+
+  if (!client) {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <div className="p-8 text-center">
+          <p className="text-gray-500 mb-4">{error || 'Client not found'}</p>
+          <Link href="/clients" className="text-primary-600 hover:text-primary-700">
+            Back to clients
+          </Link>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -60,6 +94,12 @@ export default function EditClientPage() {
           </p>
         </div>
       </div>
+
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+          {error}
+        </div>
+      )}
 
       <ClientForm client={client} onSubmit={handleSubmit} isLoading={isLoading} />
     </div>
