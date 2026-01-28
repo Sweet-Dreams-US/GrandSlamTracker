@@ -6,11 +6,13 @@ import { Lock, LogOut } from 'lucide-react'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 const ADMIN_PASSWORD = 'NeverPonYourA7'
+const ADMIN_USERNAME = 'admin'
 const STORAGE_KEY = 'gs-admin-auth'
 
 export default function AdminPasswordGate({ children }: { children: React.ReactNode }) {
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
@@ -24,12 +26,12 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (password === ADMIN_PASSWORD) {
+    if (username.toLowerCase() === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
       localStorage.setItem(STORAGE_KEY, password)
       setAuthenticated(true)
       setError('')
     } else {
-      setError('Incorrect password.')
+      setError('Incorrect username or password.')
       setPassword('')
     }
   }
@@ -37,6 +39,7 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
   const handleLogout = () => {
     localStorage.removeItem(STORAGE_KEY)
     setAuthenticated(false)
+    setUsername('')
     setPassword('')
   }
 
@@ -60,11 +63,18 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
             <p className="text-sm text-gray-500 mb-6">Sweet Dreams Media</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
+                type="text"
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError('') }}
+                placeholder="Username"
+                autoFocus
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              />
+              <input
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
                 placeholder="Password"
-                autoFocus
                 className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}

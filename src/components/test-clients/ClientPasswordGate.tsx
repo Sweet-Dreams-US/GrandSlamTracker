@@ -5,13 +5,15 @@ import { Lock, LogOut } from 'lucide-react'
 
 interface ClientPasswordGateProps {
   clientName: string
+  correctUsername: string
   correctPassword: string
   children: React.ReactNode
 }
 
-export default function ClientPasswordGate({ clientName, correctPassword, children }: ClientPasswordGateProps) {
+export default function ClientPasswordGate({ clientName, correctUsername, correctPassword, children }: ClientPasswordGateProps) {
   const [authenticated, setAuthenticated] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
@@ -27,12 +29,12 @@ export default function ClientPasswordGate({ clientName, correctPassword, childr
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (password === correctPassword) {
+    if (username.toLowerCase() === correctUsername.toLowerCase() && password === correctPassword) {
       localStorage.setItem(storageKey, password)
       setAuthenticated(true)
       setError('')
     } else {
-      setError('Incorrect password. Please try again.')
+      setError('Incorrect username or password.')
       setPassword('')
     }
   }
@@ -40,6 +42,7 @@ export default function ClientPasswordGate({ clientName, correctPassword, childr
   const handleLock = () => {
     localStorage.removeItem(storageKey)
     setAuthenticated(false)
+    setUsername('')
     setPassword('')
   }
 
@@ -60,14 +63,21 @@ export default function ClientPasswordGate({ clientName, correctPassword, childr
               <Lock className="h-8 w-8 text-monster-600" />
             </div>
             <h1 className="text-xl font-bold text-monster-900 mb-1">{clientName}</h1>
-            <p className="text-sm text-gray-500 mb-6">Enter your portal password to continue</p>
+            <p className="text-sm text-gray-500 mb-6">Enter your portal credentials to continue</p>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <input
+                type="text"
+                value={username}
+                onChange={(e) => { setUsername(e.target.value); setError('') }}
+                placeholder="Username"
+                autoFocus
+                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-monster-500 focus:border-monster-500"
+              />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
                 placeholder="Password"
-                autoFocus
                 className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-monster-500 focus:border-monster-500"
               />
               {error && <p className="text-sm text-red-600">{error}</p>}
