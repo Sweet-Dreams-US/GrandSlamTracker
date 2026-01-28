@@ -1,34 +1,36 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Image from 'next/image'
-import { Lock, LogOut } from 'lucide-react'
+import { LogOut } from 'lucide-react'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
+import MonsterScenario from '@/components/test-clients/MonsterScenario'
 
-const ADMIN_PASSWORD = 'NeverPonYourA7'
-const ADMIN_USERNAME = 'admin'
-const STORAGE_KEY = 'gs-admin-auth'
+interface UserAccount {
+  username: string
+  password: string
+  role: 'admin' | 'client'
+  clientPortal?: string
+}
+
+const USERS: UserAccount[] = [
+  { username: 'admin', password: 'NeverPonYourA7', role: 'admin' },
+  { username: 'monster', password: 'RemodelingMonster', role: 'client', clientPortal: 'monster' },
+]
 
 export default function AdminPasswordGate({ children }: { children: React.ReactNode }) {
-  const [authenticated, setAuthenticated] = useState(false)
-  const [loading, setLoading] = useState(true)
+  const [loggedInUser, setLoggedInUser] = useState<UserAccount | null>(null)
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
-  useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY)
-    if (stored === ADMIN_PASSWORD) {
-      setAuthenticated(true)
-    }
-    setLoading(false)
-  }, [])
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (username.toLowerCase() === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
-      localStorage.setItem(STORAGE_KEY, password)
-      setAuthenticated(true)
+    const match = USERS.find(
+      u => u.username.toLowerCase() === username.toLowerCase() && u.password === password
+    )
+    if (match) {
+      setLoggedInUser(match)
       setError('')
     } else {
       setError('Incorrect username or password.')
@@ -37,21 +39,14 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
   }
 
   const handleLogout = () => {
-    localStorage.removeItem(STORAGE_KEY)
-    setAuthenticated(false)
+    setLoggedInUser(null)
     setUsername('')
     setPassword('')
+    setError('')
   }
 
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-pulse text-gray-400">Loading...</div>
-      </div>
-    )
-  }
-
-  if (!authenticated) {
+  // Not logged in — show unified login
+  if (!loggedInUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
         <div className="max-w-sm w-full mx-4">
@@ -85,13 +80,31 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
                 Sign In
               </button>
             </form>
-            <p className="mt-6 text-xs text-gray-400">Access restricted to authorized admins only</p>
           </div>
         </div>
       </div>
     )
   }
 
+  // Logged in as a client — show their portal directly
+  if (loggedInUser.role === 'client') {
+    if (loggedInUser.clientPortal === 'monster') {
+      return (
+        <div className="relative">
+          <button
+            onClick={handleLogout}
+            className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-monster-100 text-monster-700 hover:bg-monster-200 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+          <MonsterScenario mode="client" />
+        </div>
+      )
+    }
+  }
+
+  // Logged in as admin — show the admin dashboard
   return (
     <>
       <button
