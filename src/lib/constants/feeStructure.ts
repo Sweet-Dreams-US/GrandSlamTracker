@@ -112,7 +112,7 @@ export const YEAR2_GROWTH_FEE_RATES: Record<BusinessSizeCategory, number[]> = {
   elite:      [0.03,  0.04,  0.05,  0.045, 0.04,  0.035, 0.03,  0.025],
 }
 
-// Year 1 Premium Growth Fee Rates (higher to compensate for no Foundation/Sustaining fees in Grand Slam)
+// Year 1 Premium Growth Fee Rates (higher to compensate for no Foundation/Sustaining fees in Partnership Offer)
 export const YEAR1_GROWTH_FEE_RATES: Record<BusinessSizeCategory, number[]> = {
   //           Tier1  Tier2  Tier3  Tier4  Tier5  Tier6  Tier7  Tier8
   micro:      [0.25,  0.30,  0.35,  0.33,  0.30,  0.27,  0.25,  0.22],
@@ -236,6 +236,14 @@ export const CLIENT_TIERS: Record<ClientTier, ClientTierConfig> = {
     description: 'Does not meet criteria',
     action: 'Decline or special terms',
   },
+}
+
+// Sustaining Fee Protections
+export const SUSTAINING_PROTECTIONS = {
+  /** Sustaining fee cannot exceed this % of current month's revenue */
+  revenueCap: 0.15,
+  /** Consecutive months below baseline before sustaining fee pauses */
+  pauseThreshold: 2,
 }
 
 // Minimum Fee Thresholds

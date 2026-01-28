@@ -20,7 +20,7 @@ export default function ContractConfigPage() {
     monthlyCap: null as number | null,
     annualCap: null as number | null,
     trialEndDate: '',
-    isGrandSlam: true, // No foundation fee for Grand Slam offers
+    isGrandSlam: true, // No foundation fee for Partnership offers
   })
 
   const [previewRevenue, setPreviewRevenue] = useState(75000)
@@ -190,7 +190,7 @@ export default function ContractConfigPage() {
         </div>
       </div>
 
-      {/* Grand Slam / Foundation Fee */}
+      {/* Partnership Offer / Foundation Fee */}
       <div className="card p-6">
         <h3 className="section-title">Fee Type</h3>
         <label className="flex items-start gap-3 cursor-pointer">
@@ -202,7 +202,7 @@ export default function ContractConfigPage() {
           />
           <div>
             <span className="text-sm font-medium text-gray-700">
-              Grand Slam Offer (No Foundation Fee)
+              Partnership Offer (No Foundation Fee)
             </span>
             <p className="text-xs text-gray-500 mt-1">
               When enabled, only performance fees apply. Foundation fees ({formatPercent(categoryInfo.foundationFeeRate)})

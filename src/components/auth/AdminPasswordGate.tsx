@@ -1,7 +1,9 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Lock, LogOut, TrendingUp } from 'lucide-react'
+import Image from 'next/image'
+import { Lock, LogOut } from 'lucide-react'
+import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 const ADMIN_PASSWORD = 'NeverPonYourA7'
 const STORAGE_KEY = 'gs-admin-auth'
@@ -51,10 +53,10 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
         <div className="max-w-sm w-full mx-4">
           <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-              <TrendingUp className="h-8 w-8 text-white" />
+            <div className="mb-4">
+              <Image src={sweetDreamsLogo} alt="Sweet Dreams" height={48} className="w-auto mx-auto" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Grand Slam Tracker</h1>
+            <h1 className="text-2xl font-bold text-gray-900 mb-1">Partnership Tracker</h1>
             <p className="text-sm text-gray-500 mb-6">Sweet Dreams Media</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <input

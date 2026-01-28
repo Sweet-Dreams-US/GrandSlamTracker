@@ -747,7 +747,7 @@ export default function WorkspacePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Year 1 */}
               <div className="card p-5 border-blue-200 bg-blue-50/50">
-                <h4 className="font-semibold text-blue-800 mb-3">Year 1 (Grand Slam)</h4>
+                <h4 className="font-semibold text-blue-800 mb-3">Year 1 (Partnership Offer)</h4>
                 {y1Summary && (
                   <div className="space-y-2 text-sm font-mono">
                     <p>
@@ -760,7 +760,7 @@ export default function WorkspacePage() {
                     </p>
                     <div className="border-t border-blue-200 pt-2 mt-2">
                       <p className="text-amber-600">
-                        Foundation: $0 (Grand Slam)
+                        Foundation: $0 (Partnership Offer)
                       </p>
                       <p className="text-purple-600">
                         Sustaining: $0 (Year 1)
@@ -1053,7 +1053,7 @@ export default function WorkspacePage() {
                 <CheckCircle className="h-6 w-6 text-green-600 mt-1 flex-shrink-0" />
                 <div>
                   <h4 className="text-lg font-bold text-green-900">
-                    Grand Slam Deal Recommended
+                    Partnership Offer Recommended
                   </h4>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 text-sm">
                     <div className="space-y-2">
@@ -1083,7 +1083,7 @@ export default function WorkspacePage() {
                       </p>
                       <p>
                         <span className="text-gray-500">Deal Type:</span>{' '}
-                        <span className="font-semibold">Grand Slam (No Y1 Foundation)</span>
+                        <span className="font-semibold">Partnership Offer (No Y1 Foundation)</span>
                       </p>
                     </div>
                   </div>
@@ -1142,7 +1142,7 @@ export default function WorkspacePage() {
         {expandedSections.has('teaching-guide') && (
           <div className="px-6 pb-6 space-y-6">
             <p className="text-sm text-gray-600">
-              Step-by-step walkthrough of the Grand Slam fee model using MC Racing as the example.
+              Step-by-step walkthrough of the Partnership fee model using MC Racing as the example.
             </p>
 
             {/* Step 1 */}
@@ -1160,9 +1160,9 @@ export default function WorkspacePage() {
 
             {/* Step 2 */}
             <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-              <h4 className="font-semibold text-gray-900 mb-2">2. Month 1 &mdash; Growth Fee Only (Grand Slam Year 1)</h4>
+              <h4 className="font-semibold text-gray-900 mb-2">2. Month 1 &mdash; Growth Fee Only (Partnership Offer Year 1)</h4>
               <p className="text-sm text-gray-700">
-                In a Grand Slam deal, Year 1 has <strong>no Foundation Fee</strong> and <strong>no Sustaining Fee</strong>.
+                In a Partnership Offer deal, Year 1 has <strong>no Foundation Fee</strong> and <strong>no Sustaining Fee</strong>.
                 The only fee is the Growth Fee &mdash; a percentage of revenue above the baseline.
                 Year 1 uses <strong>premium growth rates</strong> (higher than Year 2+) to compensate.
               </p>
@@ -1227,7 +1227,7 @@ export default function WorkspacePage() {
                 <p>Uplift: $4,000 (100% growth)</p>
                 <p className="border-t pt-1 mt-1">Tier 1 (0-50%): $2,000 x 25% = $500</p>
                 <p>Tier 2 (51-100%): $2,000 x 30% = $600</p>
-                <p className="border-t pt-1 mt-1 text-amber-600">Foundation: $0 (Grand Slam Y1)</p>
+                <p className="border-t pt-1 mt-1 text-amber-600">Foundation: $0 (Partnership Offer Y1)</p>
                 <p className="text-purple-600">Sustaining: $0 (Year 1)</p>
                 <p className="text-green-600">Growth Fee: $1,100</p>
                 <p className="font-bold text-indigo-700 border-t pt-1 mt-1">Total Fee: $1,100</p>
@@ -1342,7 +1342,7 @@ export default function WorkspacePage() {
                   </ul>
                 </div>
                 <div className="bg-white rounded-lg p-3 border border-green-200">
-                  <p className="font-semibold text-green-800 mb-2">Grand Slam Model</p>
+                  <p className="font-semibold text-green-800 mb-2">Partnership Model</p>
                   <ul className="space-y-1 text-gray-700">
                     <li>+ Client pays $0 upfront in Year 1</li>
                     <li>+ We only earn when client grows</li>
@@ -1355,11 +1355,12 @@ export default function WorkspacePage() {
               <div className="mt-3 p-3 bg-white rounded-lg border border-green-200">
                 <p className="text-sm text-green-800">
                   <strong>MC Racing example:</strong> A $2,000/mo retainer means the client pays
-                  $24,000/year no matter what. With Grand Slam, they paid ~$10,800 in Year 1 and
+                  $24,000/year no matter what. With the Partnership model, they paid ~$10,800 in Year 1 and
                   got $48,000 in new revenue. The fee was <em>earned</em>, not demanded.
                 </p>
               </div>
             </div>
+
           </div>
         )}
       </div>

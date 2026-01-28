@@ -21,6 +21,8 @@ import {
   getBusinessSizeCategory,
   getTiersWithRates,
   calculateNewBaseline,
+  getRetentionRateByGrowth,
+  SUSTAINING_PROTECTIONS,
   type RetentionOption,
 } from '../constants/feeStructure'
 
@@ -138,8 +140,10 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
 
   let currentBaseline = baselineRevenue
   let currentSustainingFee = 0
+  let currentFloorTarget = 0
   let monthsSinceYearStart = 0
   let currentYearNumber = 1
+  let consecutiveMonthsBelowBaseline = 0
 
   // Tracking for cumulative and year summaries
   let cumulativeRevenue = 0
@@ -187,17 +191,18 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
       // Calculate new baseline for Year 2+ (simplified: no industry factor)
       const avgGrowthPercent = yearGrowthSum / monthsInYear
       const avgMonthlyUplift = yearUpliftSum / monthsInYear
+      const retentionRate = getRetentionRateByGrowth(avgGrowthPercent)
       const newBaseline = calculateNewBaseline(
         currentBaseline,
         avgMonthlyUplift,
         avgGrowthPercent
       )
 
-      // Calculate sustaining fee (protects last year's average)
-      const newSustainingFee = calculateSustainingFee(
+      // Calculate sustaining fee using same retention % as baseline reset
+      const { sustainingFee: newSustainingFee, floorTarget: newFloorTarget } = calculateSustainingFee(
         lastYearAvgMonthlyFee,
         newBaseline,
-        currentSustainingFee
+        retentionRate,
       )
 
       baselineResets.push({
@@ -211,6 +216,8 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
 
       currentBaseline = newBaseline
       currentSustainingFee = newSustainingFee
+      currentFloorTarget = newFloorTarget
+      consecutiveMonthsBelowBaseline = 0
       currentYearNumber++
       monthsSinceYearStart = 0
 
@@ -241,12 +248,30 @@ export function projectScenario(input: ProjectionInput): ProjectionResult {
 
     const growth = calculateGrowthFee(feeBaseline, projectedRevenue, isYear1)
 
-    // Foundation fee (monthly portion) - can be $0 for Grand Slam Year 1
+    // Foundation fee (monthly portion) - can be $0 for Partnership Offer Year 1
     const foundation = calculateFoundationFee(currentBaseline)
     const foundationFee = (isGrandSlam && isYear1) ? 0 : foundation.foundationFeeMonthly
 
-    // Sustaining fee (Year 2+ only)
-    const sustainingFee = isYear1 ? 0 : currentSustainingFee
+    // Sustaining fee (Year 2+ only) with protections
+    let sustainingFee = isYear1 ? 0 : currentSustainingFee
+
+    if (!isYear1 && sustainingFee > 0) {
+      // Baseline pause: if below baseline 2+ consecutive months, sustaining = $0
+      if (consecutiveMonthsBelowBaseline >= SUSTAINING_PROTECTIONS.pauseThreshold) {
+        sustainingFee = 0
+      } else {
+        // Revenue cap: sustaining fee cannot exceed 15% of current month's revenue
+        const revenueCap = projectedRevenue * SUSTAINING_PROTECTIONS.revenueCap
+        sustainingFee = Math.min(sustainingFee, revenueCap)
+      }
+    }
+
+    // Track consecutive months below baseline for pause protection
+    if (projectedRevenue < currentBaseline) {
+      consecutiveMonthsBelowBaseline++
+    } else {
+      consecutiveMonthsBelowBaseline = 0
+    }
 
     // Total
     const totalMonthlyFee = foundationFee + sustainingFee + growth.growthFee

@@ -78,22 +78,28 @@ export function calculateFoundationFee(monthlyBaseline: number): AnnualFeeResult
 
 /**
  * Calculate sustaining fee (Year 2+ only)
- * Formula: Sustaining = Last Year Avg Monthly Fee - (New Foundation ÷ 12)
- * Rules:
- * - Only kicks in Year 2+
- * - Can only increase, never decrease
- * - Ensures we never earn less than last year
+ *
+ * New formula (uses same retention % as baseline reset):
+ *   Floor Target = Last Year Avg Monthly Fee × Retention %
+ *   Sustaining Fee = Floor Target - Foundation Fee (Monthly Equivalent)
+ *   If < 0, then $0
+ *
+ * Per-month protections (revenue cap, baseline pause) are applied in the
+ * scenario projector, not here.
  */
 export function calculateSustainingFee(
   lastYearAvgMonthlyFee: number,
   newMonthlyBaseline: number,
-  previousSustainingFee: number = 0
-): number {
+  retentionRate: number,
+): { sustainingFee: number; floorTarget: number } {
+  const floorTarget = lastYearAvgMonthlyFee * retentionRate
   const newFoundation = calculateFoundationFee(newMonthlyBaseline)
-  const calculatedSustaining = Math.max(0, lastYearAvgMonthlyFee - newFoundation.foundationFeeMonthly)
+  const sustainingFee = Math.max(0, floorTarget - newFoundation.foundationFeeMonthly)
 
-  // Can only increase, never decrease
-  return Math.max(calculatedSustaining, previousSustainingFee)
+  return {
+    sustainingFee: Math.round(sustainingFee * 100) / 100,
+    floorTarget: Math.round(floorTarget * 100) / 100,
+  }
 }
 
 /**

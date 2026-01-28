@@ -7,6 +7,8 @@ import { getTierRatesForBaseline, formatGrowthPercentage, calculateGrowthFee, ca
 import { getSeasonalFactors } from '@/lib/constants/seasonalIndices'
 import { RETENTION_BRACKETS } from '@/lib/constants/feeStructure'
 import RevenueChart from '@/components/charts/RevenueChart'
+import Image from 'next/image'
+import monsterLogo from '@/assets/MonsterRemodelingLogo.webp'
 
 // ─── Reference Badge Component ──────────────────────────────────────────────
 function RefBadge({ id, label }: { id: string; label: string }) {
@@ -43,9 +45,14 @@ interface Stream {
 }
 
 interface BusinessCosts {
-  crews: { count: number; costPerCrew: number }
+  crews: { members: number; costPerMemberPerJob: number; avgJobRevenue: number }
   otherEmployees: number
   overheadCosts: number
+  insurance: number
+  vehiclesCosts: number
+  toolsEquipment: number
+  marketing: number
+  officeRent: number
 }
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -57,9 +64,14 @@ const DEFAULT_STREAMS: Stream[] = [
 ]
 
 const DEFAULT_BUSINESS_COSTS: BusinessCosts = {
-  crews: { count: 4, costPerCrew: 8000 },
+  crews: { members: 3, costPerMemberPerJob: 2500, avgJobRevenue: 15000 },
   otherEmployees: 5000,
-  overheadCosts: 4000,
+  overheadCosts: 500,
+  insurance: 1200,
+  vehiclesCosts: 800,
+  toolsEquipment: 500,
+  marketing: 500,
+  officeRent: 500,
 }
 
 // ─── Fort Wayne Market Data ──────────────────────────────────────────────────
@@ -171,6 +183,8 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
   const [costsPanelOpen, setCostsPanelOpen] = useState(false)
   const [revenueEditMode, setRevenueEditMode] = useState(false)
   const [revenueOverrides, setRevenueOverrides] = useState<Record<number, number>>({})
+  const [growthInputMode, setGrowthInputMode] = useState<'percent' | 'revenue'>('percent')
+  const [revenueTarget, setRevenueTarget] = useState('')
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<TabId>('calculator')
@@ -216,6 +230,45 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
     }
   }
 
+  // Binary search for the growth % that makes the projection engine
+  // produce a given total Y1 revenue (accounts for compounding + seasonality)
+  const solveGrowthForTarget = useCallback((targetAnnual: number): number | null => {
+    const baselineAnnual = baseline * 12
+    if (targetAnnual <= baselineAnnual) return null
+    let lo = 0, hi = 5
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2
+      const mgr = Math.pow(1 + mid, 1 / 12) - 1
+      const proj = projectScenario({
+        baselineRevenue: baseline,
+        industry: 'remodeling',
+        monthlyGrowthRate: mgr,
+        startMonth,
+        startYear,
+        projectionMonths: 12,
+        isGrandSlam: true,
+        applySeasonality: true,
+      })
+      if (proj.summary.totalProjectedRevenue < targetAnnual) {
+        lo = mid
+      } else {
+        hi = mid
+      }
+    }
+    const result = (lo + hi) / 2
+    return result <= 5 ? result : null
+  }, [baseline, startMonth, startYear])
+
+  const applyRevenueTarget = () => {
+    if (contractLocked) return
+    const targetAnnual = parseFloat(revenueTarget)
+    if (isNaN(targetAnnual)) return
+    const solved = solveGrowthForTarget(targetAnnual)
+    if (solved === null) return
+    setGrowthPercent(solved)
+    setCustomGrowth('')
+  }
+
   // ── Derived calculations ──
   const monthlyGrowthRate = useMemo(() => Math.pow(1 + growthPercent, 1 / 12) - 1, [growthPercent])
 
@@ -249,37 +302,53 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
   const hasOverrides = Object.keys(revenueOverrides).length > 0
   const customProjection = useMemo(() => {
     if (!hasOverrides) return null
-    // Recalculate each month using overridden revenue where provided
+
+    // Recalculate ALL months so cumulatives, year totals, and fee columns all update
+    let cumRevenue = 0
+    let cumFoundation = 0
+    let cumSustaining = 0
+    let cumGrowth = 0
+
     const projections = y1Projection.projections.map((p, i) => {
-      if (!(i in revenueOverrides)) return p
-      const overriddenRevenue = revenueOverrides[i]
+      const revenue = (i in revenueOverrides) ? revenueOverrides[i] : p.projectedRevenue
       const isYear1 = p.yearNumber === 1
       const isGrandSlam = true
 
-      // Recalculate fees with overridden revenue
-      const feeBaseline = p.currentBaseline * p.seasonalIndex
-      const growth = calculateGrowthFee(feeBaseline, overriddenRevenue, isYear1)
+      // Year 1: seasonal-adjusted baseline for fee calc. Year 2+: flat baseline.
+      const feeBaseline = (isYear1 && p.seasonalIndex !== 1)
+        ? Math.round(p.currentBaseline * p.seasonalIndex * 100) / 100
+        : p.currentBaseline
+
+      const growth = calculateGrowthFee(feeBaseline, revenue, isYear1)
       const foundation = calculateFoundationFee(p.currentBaseline)
       const foundationFee = (isGrandSlam && isYear1) ? 0 : foundation.foundationFeeMonthly
-      const sustainingFee = p.sustainingFee // Keep sustaining from original projection
+      const sustainingFee = p.sustainingFee
       const totalMonthlyFee = Math.round((foundationFee + sustainingFee + growth.growthFee) * 100) / 100
+
+      cumRevenue += revenue
+      cumFoundation += foundationFee
+      cumSustaining += sustainingFee
+      cumGrowth += growth.growthFee
 
       return {
         ...p,
-        projectedRevenue: overriddenRevenue,
+        projectedRevenue: revenue,
         uplift: growth.upliftAmount,
         growthPercentage: growth.growthPercentage,
         growthFee: growth.growthFee,
         foundationFee,
         totalMonthlyFee,
+        cumulativeRevenue: Math.round(cumRevenue * 100) / 100,
+        cumulativeFoundationFees: Math.round(cumFoundation * 100) / 100,
+        cumulativeSustainingFees: Math.round(cumSustaining * 100) / 100,
+        cumulativeGrowthFees: Math.round(cumGrowth * 100) / 100,
+        cumulativeTotalFees: Math.round((cumFoundation + cumSustaining + cumGrowth) * 100) / 100,
       }
     })
 
-    const totalProjectedRevenue = projections.reduce((s, p) => s + p.projectedRevenue, 0)
-    const totalFees = projections.reduce((s, p) => s + p.totalMonthlyFee, 0)
-    const totalGrowthFees = projections.reduce((s, p) => s + p.growthFee, 0)
-    const totalFoundationFees = projections.reduce((s, p) => s + p.foundationFee, 0)
-    const totalSustainingFees = projections.reduce((s, p) => s + p.sustainingFee, 0)
+    const totalProjectedRevenue = cumRevenue
+    const totalFees = cumFoundation + cumSustaining + cumGrowth
+    const totalUplift = projections.reduce((s, p) => s + p.uplift, 0)
 
     return {
       projections,
@@ -287,10 +356,11 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
         ...y1Projection.summary,
         totalProjectedRevenue: Math.round(totalProjectedRevenue * 100) / 100,
         totalFees: Math.round(totalFees * 100) / 100,
-        totalGrowthFees: Math.round(totalGrowthFees * 100) / 100,
-        totalFoundationFees: Math.round(totalFoundationFees * 100) / 100,
-        totalSustainingFees: Math.round(totalSustainingFees * 100) / 100,
+        totalGrowthFees: Math.round(cumGrowth * 100) / 100,
+        totalFoundationFees: Math.round(cumFoundation * 100) / 100,
+        totalSustainingFees: Math.round(cumSustaining * 100) / 100,
         avgMonthlyFee: Math.round((totalFees / projections.length) * 100) / 100,
+        avgEffectiveRate: totalUplift > 0 ? Math.round((totalFees / totalUplift) * 100 * 100) / 100 : 0,
       },
     }
   }, [y1Projection, revenueOverrides, hasOverrides])
@@ -332,8 +402,13 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
 
   // ── Cost & Profitability calculations ──
   const costAnalysis = useMemo(() => {
-    const crewCosts = businessCosts.crews.count * businessCosts.crews.costPerCrew
-    const totalFixedCosts = crewCosts + businessCosts.otherEmployees + businessCosts.overheadCosts
+    // Crew costs are variable — they scale with the number of jobs
+    const { members, costPerMemberPerJob, avgJobRevenue } = businessCosts.crews
+    const crewCostPerJob = members * costPerMemberPerJob
+    const baselineJobsPerMonth = avgJobRevenue > 0 ? baseline / avgJobRevenue : 0
+    const baselineCrewCosts = baselineJobsPerMonth * crewCostPerJob
+
+    const totalFixedCosts = businessCosts.otherEmployees + businessCosts.overheadCosts + businessCosts.insurance + businessCosts.vehiclesCosts + businessCosts.toolsEquipment + businessCosts.marketing + businessCosts.officeRent
 
     // Weighted average material cost %
     const totalStreamRevenue = streams.reduce((s, st) => s + st.monthlyAmount, 0)
@@ -342,26 +417,29 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
       : 0
 
     const baselineMaterialCost = baseline * (weightedMaterialPct / 100)
-    const totalMonthlyCosts = totalFixedCosts + baselineMaterialCost
+    const totalMonthlyCosts = totalFixedCosts + baselineCrewCosts + baselineMaterialCost
 
     // Baseline P&L
     const baselineNetBeforeFees = baseline - totalMonthlyCosts
 
-    // Growth scenario P&L
+    // Growth scenario P&L — crew costs scale with growth revenue
     const growthRevenue = baseline * (1 + growthPercent)
+    const growthJobsPerMonth = avgJobRevenue > 0 ? growthRevenue / avgJobRevenue : 0
+    const growthCrewCosts = growthJobsPerMonth * crewCostPerJob
     const growthMaterialCost = growthRevenue * (weightedMaterialPct / 100)
-    const growthTotalCosts = totalFixedCosts + growthMaterialCost
+    const growthTotalCosts = totalFixedCosts + growthCrewCosts + growthMaterialCost
     const growthNetBeforeFees = growthRevenue - growthTotalCosts
 
     // Sweet Dreams fee at growth (approximate from Y1 projection avg)
     const avgMonthlyFee = y1Projection.summary.avgMonthlyFee
     const growthNetAfterFees = growthNetBeforeFees - avgMonthlyFee
 
-    // Break-even: revenue needed where revenue - materials - fixed = 0
-    // revenue - revenue*(matPct/100) - fixed = 0
-    // revenue * (1 - matPct/100) = fixed
-    const breakEvenRevenue = weightedMaterialPct < 100
-      ? totalFixedCosts / (1 - weightedMaterialPct / 100)
+    // Break-even: revenue - materials - crew(variable) - fixed = 0
+    // revenue - revenue*(matPct/100) - (revenue/avgJob)*crewCostPerJob - fixed = 0
+    // revenue * (1 - matPct/100 - crewCostPerJob/avgJob) = fixed
+    const variableRate = (weightedMaterialPct / 100) + (avgJobRevenue > 0 ? crewCostPerJob / avgJobRevenue : 0)
+    const breakEvenRevenue = variableRate < 1
+      ? totalFixedCosts / (1 - variableRate)
       : Infinity
     const breakEvenGrowthPct = breakEvenRevenue > baseline
       ? ((breakEvenRevenue - baseline) / baseline) * 100
@@ -377,7 +455,11 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
     })
 
     return {
-      crewCosts,
+      crewCostPerJob,
+      baselineJobsPerMonth,
+      baselineCrewCosts,
+      growthJobsPerMonth,
+      growthCrewCosts,
       totalFixedCosts,
       weightedMaterialPct,
       baselineMaterialCost,
@@ -431,6 +513,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
           <div>
             <div className="flex items-center gap-3">
+              <Image src={monsterLogo} alt="Monster Remodeling" width={48} height={48} className="rounded-lg bg-white p-0.5" />
               <h1 className="text-2xl font-bold">Monster Remodeling</h1>
               {contractLocked ? (
                 <span className="flex items-center gap-1 px-2 py-1 rounded bg-red-500/80 text-xs font-bold">
@@ -551,43 +634,118 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
               </div>
             </div>
 
-            {/* Growth Presets + Custom */}
+            {/* Growth Presets + Custom / Revenue Target Toggle */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Annual Growth Target <span className="text-gray-400 font-normal">(compound annual growth %)</span></label>
-              <div className="flex flex-wrap gap-2">
-                {PRESET_SCENARIOS.map((s) => (
+              <div className="flex items-center gap-3 mb-2">
+                <label className="block text-xs font-medium text-gray-600">Annual Growth Target</label>
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
                   <button
-                    key={s.label}
-                    onClick={() => selectPreset(s.value)}
-                    disabled={contractLocked}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      growthPercent === s.value
-                        ? 'bg-monster-600 text-white'
-                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-monster-50'
-                    }`}
+                    onClick={() => setGrowthInputMode('percent')}
+                    className={`px-3 py-1 font-medium transition-colors ${growthInputMode === 'percent' ? 'bg-monster-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   >
-                    {s.label}
+                    Growth %
                   </button>
-                ))}
-                <div className="flex gap-1">
-                  <input
-                    type="number"
-                    placeholder="Custom %"
-                    value={customGrowth}
-                    disabled={contractLocked}
-                    onChange={(e) => setCustomGrowth(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && applyCustomGrowth()}
-                    className="border border-gray-300 rounded-lg px-3 py-2 w-24 text-sm disabled:bg-gray-100"
-                  />
                   <button
-                    onClick={applyCustomGrowth}
-                    disabled={contractLocked}
-                    className="px-3 py-2 rounded-lg text-sm bg-monster-100 text-monster-700 hover:bg-monster-200 disabled:opacity-50"
+                    onClick={() => setGrowthInputMode('revenue')}
+                    className={`px-3 py-1 font-medium transition-colors ${growthInputMode === 'revenue' ? 'bg-monster-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   >
-                    Apply
+                    Revenue Target
                   </button>
                 </div>
+                {growthInputMode === 'revenue' && revenueTarget && growthPercent > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    Target: {formatCurrency(parseFloat(revenueTarget))}/yr ({(growthPercent * 100).toFixed(1)}% growth)
+                  </span>
+                )}
               </div>
+
+              {growthInputMode === 'percent' ? (
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_SCENARIOS.map((s) => (
+                    <button
+                      key={s.label}
+                      onClick={() => selectPreset(s.value)}
+                      disabled={contractLocked}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                        growthPercent === s.value
+                          ? 'bg-monster-600 text-white'
+                          : 'bg-white border border-gray-200 text-gray-700 hover:bg-monster-50'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                  <div className="flex gap-1">
+                    <input
+                      type="number"
+                      placeholder="Custom %"
+                      value={customGrowth}
+                      disabled={contractLocked}
+                      onChange={(e) => setCustomGrowth(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && applyCustomGrowth()}
+                      className="border border-gray-300 rounded-lg px-3 py-2 w-24 text-sm disabled:bg-gray-100"
+                    />
+                    <button
+                      onClick={applyCustomGrowth}
+                      disabled={contractLocked}
+                      className="px-3 py-2 rounded-lg text-sm bg-monster-100 text-monster-700 hover:bg-monster-200 disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    Current baseline: {formatCurrency(baseline * 12)}/year. Enter your target annual revenue.
+                  </p>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex gap-1">
+                      <span className="flex items-center text-sm text-gray-500 pl-1">$</span>
+                      <input
+                        type="number"
+                        placeholder="e.g. 600000"
+                        value={revenueTarget}
+                        disabled={contractLocked}
+                        onChange={(e) => setRevenueTarget(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applyRevenueTarget()}
+                        className="border border-gray-300 rounded-lg px-3 py-2 w-36 text-sm disabled:bg-gray-100"
+                      />
+                      <button
+                        onClick={applyRevenueTarget}
+                        disabled={contractLocked}
+                        className="px-3 py-2 rounded-lg text-sm bg-monster-600 text-white hover:bg-monster-700 disabled:opacity-50"
+                      >
+                        Set Target
+                      </button>
+                    </div>
+                    {revenueTarget && !isNaN(parseFloat(revenueTarget)) && parseFloat(revenueTarget) > baseline * 12 && (
+                      <span className="text-xs text-gray-500">
+                        Click &quot;Set Target&quot; to calculate exact growth %
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[500000, 600000, 750000, 1000000].filter((v) => v > baseline * 12).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          if (contractLocked) return
+                          const solved = solveGrowthForTarget(v)
+                          if (solved === null) return
+                          setGrowthPercent(solved)
+                          setRevenueTarget(String(v))
+                          setCustomGrowth('')
+                        }}
+                        disabled={contractLocked}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-700 hover:bg-monster-50 disabled:opacity-50 transition-colors"
+                      >
+                        {formatCurrency(v)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Start Month/Year + Projection Length */}
@@ -654,85 +812,271 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
 
         {costsPanelOpen && (
           <div className="p-4 pt-0 space-y-4 border-t border-orange-100">
-            {/* Crew Costs */}
+            {/* Crew Costs (per job) */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Crew Costs</label>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Crew Costs (per job — scales with revenue)</label>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
-                    value={businessCosts.crews.count}
-                    min={0}
-                    max={50}
-                    onChange={(e) => setBusinessCosts({ ...businessCosts, crews: { ...businessCosts.crews, count: Number(e.target.value) } })}
+                    value={businessCosts.crews.members}
+                    min={1}
+                    max={20}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, crews: { ...businessCosts.crews, members: Number(e.target.value) } })}
                     className="border border-gray-300 rounded-lg px-3 py-2 w-20 text-sm"
                   />
-                  <span className="text-sm text-gray-600">crews</span>
+                  <span className="text-sm text-gray-600">guys</span>
                 </div>
                 <span className="text-gray-400">&times;</span>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-gray-500">$</span>
                   <input
                     type="number"
-                    value={businessCosts.crews.costPerCrew}
+                    value={businessCosts.crews.costPerMemberPerJob}
                     min={0}
-                    step={500}
-                    onChange={(e) => setBusinessCosts({ ...businessCosts, crews: { ...businessCosts.crews, costPerCrew: Number(e.target.value) } })}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, crews: { ...businessCosts.crews, costPerMemberPerJob: Number(e.target.value) } })}
                     className="border border-gray-300 rounded-lg px-3 py-2 w-28 text-sm"
                   />
-                  <span className="text-sm text-gray-600">/crew/mo</span>
+                  <span className="text-sm text-gray-600">/person/job</span>
                 </div>
-                <span className="text-sm font-medium text-gray-700">= {formatCurrency(businessCosts.crews.count * businessCosts.crews.costPerCrew)}/mo</span>
+                <span className="text-gray-400">|</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-gray-500">Avg job $</span>
+                  <input
+                    type="number"
+                    value={businessCosts.crews.avgJobRevenue}
+                    min={1000}
+                    step={1000}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, crews: { ...businessCosts.crews, avgJobRevenue: Number(e.target.value) } })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-28 text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                {costAnalysis.baselineJobsPerMonth.toFixed(1)} jobs/mo at baseline &middot;
+                {formatCurrency(costAnalysis.crewCostPerJob)}/job crew cost &middot;
+                = {formatCurrency(costAnalysis.baselineCrewCosts)}/mo crew labor
+              </p>
+            </div>
+
+            {/* Labor */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Labor</p>
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Other Employees (monthly)</label>
+                  <input
+                    type="number"
+                    value={businessCosts.otherEmployees}
+                    min={0}
+                    step={500}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, otherEmployees: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Other Employees */}
-            <div className="flex flex-wrap gap-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Other Employees (monthly)</label>
-                <input
-                  type="number"
-                  value={businessCosts.otherEmployees}
-                  min={0}
-                  step={500}
-                  onChange={(e) => setBusinessCosts({ ...businessCosts, otherEmployees: Number(e.target.value) })}
-                  className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">Overhead (rent, insurance, etc.)</label>
-                <input
-                  type="number"
-                  value={businessCosts.overheadCosts}
-                  min={0}
-                  step={500}
-                  onChange={(e) => setBusinessCosts({ ...businessCosts, overheadCosts: Number(e.target.value) })}
-                  className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
-                />
+            {/* Operations */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Operations</p>
+              <div className="flex flex-wrap gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Insurance</label>
+                  <input
+                    type="number"
+                    value={businessCosts.insurance}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, insurance: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Vehicles</label>
+                  <input
+                    type="number"
+                    value={businessCosts.vehiclesCosts}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, vehiclesCosts: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Tools & Equipment</label>
+                  <input
+                    type="number"
+                    value={businessCosts.toolsEquipment}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, toolsEquipment: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Office Rent</label>
+                  <input
+                    type="number"
+                    value={businessCosts.officeRent}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, officeRent: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Summary */}
-            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200">
-              <h4 className="text-sm font-semibold text-orange-900 mb-2">Monthly Cost Summary</h4>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+            {/* Marketing */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Marketing</p>
+              <div className="flex flex-wrap gap-4">
                 <div>
-                  <p className="text-xs text-gray-500">Fixed Costs</p>
-                  <p className="font-semibold">{formatCurrency(costAnalysis.totalFixedCosts)}</p>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Marketing Budget</label>
+                  <input
+                    type="number"
+                    value={businessCosts.marketing}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, marketing: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
                 </div>
+              </div>
+            </div>
+
+            {/* Misc Overhead */}
+            <div>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Misc Overhead</p>
+              <div className="flex flex-wrap gap-4">
                 <div>
-                  <p className="text-xs text-gray-500">Material Costs (avg {costAnalysis.weightedMaterialPct.toFixed(1)}%)</p>
-                  <p className="font-semibold">{formatCurrency(costAnalysis.baselineMaterialCost)}</p>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Other Overhead</label>
+                  <input
+                    type="number"
+                    value={businessCosts.overheadCosts}
+                    min={0}
+                    step={100}
+                    onChange={(e) => setBusinessCosts({ ...businessCosts, overheadCosts: Number(e.target.value) })}
+                    className="border border-gray-300 rounded-lg px-3 py-2 w-32 text-sm"
+                  />
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500">Total Monthly Costs</p>
-                  <p className="font-bold text-orange-700">{formatCurrency(costAnalysis.totalMonthlyCosts)}</p>
+              </div>
+            </div>
+
+            {/* Your Business Today */}
+            <div className="bg-orange-50 rounded-lg p-4 border border-orange-200 space-y-4">
+              <h4 className="text-sm font-semibold text-orange-900">Your Business Today</h4>
+
+              {/* Cost Structure Bars */}
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Cost Structure (% of Revenue)</p>
+                <div className="space-y-1.5">
+                  {[
+                    { label: 'Materials', value: costAnalysis.baselineMaterialCost, color: 'bg-red-400' },
+                    { label: 'Crew Labor', value: costAnalysis.baselineCrewCosts, color: 'bg-orange-400' },
+                    { label: 'Employees', value: businessCosts.otherEmployees, color: 'bg-amber-400' },
+                    { label: 'Insurance', value: businessCosts.insurance, color: 'bg-blue-400' },
+                    { label: 'Vehicles', value: businessCosts.vehiclesCosts, color: 'bg-cyan-400' },
+                    { label: 'Tools/Equip', value: businessCosts.toolsEquipment, color: 'bg-teal-400' },
+                    { label: 'Marketing', value: businessCosts.marketing, color: 'bg-purple-400' },
+                    { label: 'Office Rent', value: businessCosts.officeRent, color: 'bg-indigo-400' },
+                    { label: 'Overhead', value: businessCosts.overheadCosts, color: 'bg-gray-400' },
+                  ].filter((c) => c.value > 0).map((c) => {
+                    const pct = baseline > 0 ? (c.value / baseline) * 100 : 0
+                    return (
+                      <div key={c.label} className="flex items-center gap-2 text-xs">
+                        <span className="w-20 text-gray-600 truncate">{c.label}</span>
+                        <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+                          <div className={`${c.color} h-full rounded-full`} style={{ width: `${Math.min(pct, 100)}%` }} />
+                        </div>
+                        <span className="w-20 text-right text-gray-500">{formatCurrency(c.value)} ({pct.toFixed(1)}%)</span>
+                      </div>
+                    )
+                  })}
                 </div>
-                <div>
-                  <p className="text-xs text-gray-500">Gross Margin</p>
-                  <p className={`font-bold ${costAnalysis.baselineMargin >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {costAnalysis.baselineMargin.toFixed(1)}%
-                  </p>
+              </div>
+
+              {/* Per-Stream Margin Bars */}
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Per-Stream Margins</p>
+                <div className="space-y-1.5">
+                  {costAnalysis.streamProfitability.map((sp) => (
+                    <div key={sp.name} className="flex items-center gap-2 text-xs">
+                      <span className="w-28 text-gray-600 truncate">{sp.name}</span>
+                      <div className="flex-1 bg-gray-200 rounded-full h-3 overflow-hidden">
+                        <div className="bg-green-500 h-full rounded-full" style={{ width: `${Math.min(sp.margin, 100)}%` }} />
+                      </div>
+                      <span className="w-14 text-right font-medium text-gray-700">{sp.margin.toFixed(1)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Today vs. Growth Side-by-Side */}
+              <div>
+                <p className="text-xs font-medium text-gray-600 mb-2">Today vs. {growthLabel}</p>
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Today */}
+                  <div className="bg-white rounded-lg p-3 border border-gray-200">
+                    <p className="text-xs font-semibold text-gray-500 uppercase mb-2">Current</p>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Revenue</span>
+                        <span className="font-medium">{formatCurrency(baseline)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Costs</span>
+                        <span className="text-red-600">{formatCurrency(costAnalysis.totalMonthlyCosts)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Profit</span>
+                        <span className={costAnalysis.baselineNetBeforeFees >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {formatCurrency(costAnalysis.baselineNetBeforeFees)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Margin</span>
+                        <span className={costAnalysis.baselineMargin >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {costAnalysis.baselineMargin.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Growth */}
+                  <div className="bg-white rounded-lg p-3 border border-green-200">
+                    <div className="flex items-center justify-between mb-2">
+                      <p className="text-xs font-semibold text-green-700 uppercase">At {growthLabel}</p>
+                      {costAnalysis.growthNetAfterFees > costAnalysis.baselineNetBeforeFees && (
+                        <span className="text-xs font-semibold text-green-600 bg-green-100 px-1.5 py-0.5 rounded">
+                          +{formatCurrency(costAnalysis.growthNetAfterFees - costAnalysis.baselineNetBeforeFees)}
+                        </span>
+                      )}
+                    </div>
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Revenue</span>
+                        <span className="font-medium">{formatCurrency(costAnalysis.growthRevenue)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Costs</span>
+                        <span className="text-red-600">{formatCurrency(costAnalysis.growthTotalCosts)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Profit (after fees)</span>
+                        <span className={costAnalysis.growthNetAfterFees >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {formatCurrency(costAnalysis.growthNetAfterFees)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Margin</span>
+                        <span className={costAnalysis.growthMarginAfterFees >= 0 ? 'text-green-600 font-semibold' : 'text-red-600 font-semibold'}>
+                          {costAnalysis.growthMarginAfterFees.toFixed(1)}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -813,7 +1157,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                 <p className="text-xl font-bold text-amber-600">
                   {formatCurrency(y1Projection.summary.totalFoundationFees)}
                 </p>
-                <p className="text-xs text-gray-400">$0 Year 1 (Grand Slam)</p>
+                <p className="text-xs text-gray-400">$0 Year 1 (Partnership Offer)</p>
                 <p className="text-[10px] text-gray-400 mt-1">= Baseline &times; {formatPercent(categoryInfo.foundationFeeRate)} annual</p>
               </div>
               <div className="text-center p-3 bg-monster-50 rounded-lg border border-monster-200">
@@ -1165,7 +1509,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
               <div key={yr.yearNumber} className="card p-6">
                 <h3 className="font-semibold text-monster-900 mb-1">
                   How We Both Win (Year {yr.yearNumber})
-                  {isY1 && <span className="ml-2 text-xs bg-monster-200 text-monster-800 px-2 py-0.5 rounded-full">Grand Slam</span>}
+                  {isY1 && <span className="ml-2 text-xs bg-monster-200 text-monster-800 px-2 py-0.5 rounded-full">Partnership Offer</span>}
                 </h3>
                 <p className="text-xs text-gray-500 mb-4">
                   Baseline: {formatCurrency(yr.startBaseline)}/mo &middot; {growthLabel}
@@ -1192,7 +1536,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                         <span className="font-medium text-green-600">{formatCurrency(yr.growthFeeTotal)}</span>
                       </div>
                       {isY1 && (
-                        <p className="text-xs text-monster-500 italic">Year 1 Grand Slam: no Foundation or Sustaining fees</p>
+                        <p className="text-xs text-monster-500 italic">Year 1 Partnership Offer: no Foundation or Sustaining fees</p>
                       )}
                       <hr className="border-monster-200" />
                       <div className="flex justify-between font-bold text-monster-800">
@@ -1253,7 +1597,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                     <p className="font-medium text-gray-700 mb-1">Formula:</p>
                     <p className="font-mono text-xs text-gray-600">ROI = (Revenue Gained - Fees Paid) / Fees Paid</p>
                     <p className="text-gray-500 mt-2">
-                      Our fee structure is performance-based: we only earn more when Monster earns more. In Year 1 (Grand Slam),
+                      Our fee structure is performance-based: we only earn more when Monster earns more. In Year 1 (Partnership Offer),
                       there are no foundation or sustaining fees &mdash; Monster only pays growth fees on actual uplift. The tiered model
                       means our incentive is directly aligned with your growth. If growth slows, our earnings decrease proportionally.
                     </p>
@@ -1400,16 +1744,28 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                 <span>({formatCurrency(costAnalysis.baselineMaterialCost)})</span>
               </div>
               <div className="flex justify-between text-red-600">
-                <span>- Crews ({businessCosts.crews.count}&times;{formatCurrency(businessCosts.crews.costPerCrew)}):</span>
-                <span>({formatCurrency(costAnalysis.crewCosts)})</span>
+                <span>- Crew Labor ({costAnalysis.baselineJobsPerMonth.toFixed(1)} jobs &times; {businessCosts.crews.members} guys &times; {formatCurrency(businessCosts.crews.costPerMemberPerJob)}):</span>
+                <span>({formatCurrency(costAnalysis.baselineCrewCosts)})</span>
               </div>
               <div className="flex justify-between text-red-600">
                 <span>- Other Employees:</span>
                 <span>({formatCurrency(businessCosts.otherEmployees)})</span>
               </div>
               <div className="flex justify-between text-red-600">
-                <span>- Overhead:</span>
-                <span>({formatCurrency(businessCosts.overheadCosts)})</span>
+                <span>- Insurance:</span>
+                <span>({formatCurrency(businessCosts.insurance)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Vehicles &amp; Equipment:</span>
+                <span>({formatCurrency(businessCosts.vehiclesCosts + businessCosts.toolsEquipment)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Office &amp; Overhead:</span>
+                <span>({formatCurrency(businessCosts.officeRent + businessCosts.overheadCosts)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Marketing:</span>
+                <span>({formatCurrency(businessCosts.marketing)})</span>
               </div>
               <hr className="border-gray-300" />
               <div className={`flex justify-between font-bold ${costAnalysis.baselineNetBeforeFees >= 0 ? 'text-green-700' : 'text-red-700'}`}>
@@ -1435,8 +1791,28 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                 <span>({formatCurrency(costAnalysis.growthMaterialCost)})</span>
               </div>
               <div className="flex justify-between text-red-600">
-                <span>- Fixed Costs (crews + employees + overhead):</span>
-                <span>({formatCurrency(costAnalysis.totalFixedCosts)})</span>
+                <span>- Crew Labor ({costAnalysis.growthJobsPerMonth.toFixed(1)} jobs &times; {businessCosts.crews.members} guys &times; {formatCurrency(businessCosts.crews.costPerMemberPerJob)}):</span>
+                <span>({formatCurrency(costAnalysis.growthCrewCosts)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Other Employees:</span>
+                <span>({formatCurrency(businessCosts.otherEmployees)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Insurance:</span>
+                <span>({formatCurrency(businessCosts.insurance)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Vehicles &amp; Equipment:</span>
+                <span>({formatCurrency(businessCosts.vehiclesCosts + businessCosts.toolsEquipment)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Office &amp; Overhead:</span>
+                <span>({formatCurrency(businessCosts.officeRent + businessCosts.overheadCosts)})</span>
+              </div>
+              <div className="flex justify-between text-red-600">
+                <span>- Marketing:</span>
+                <span>({formatCurrency(businessCosts.marketing)})</span>
               </div>
               <hr className="border-green-300" />
               <div className={`flex justify-between font-bold ${costAnalysis.growthNetBeforeFees >= 0 ? 'text-green-700' : 'text-red-700'}`}>
@@ -1866,7 +2242,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                   <li>&bull; Data-driven pricing to push margins from 30% to 35&ndash;40%</li>
                   <li>&bull; Systematic lead qualification and sales process</li>
                   <li>&bull; Performance-based fees mean we succeed only when you succeed</li>
-                  <li>&bull; No upfront cost in Year 1 (Grand Slam) &mdash; zero risk to try</li>
+                  <li>&bull; No upfront cost in Year 1 (Partnership Offer) &mdash; zero risk to try</li>
                 </ul>
               </div>
             </div>
@@ -2154,7 +2530,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
         <div className="space-y-6">
           {/* ── 10-Step Walkthrough ── */}
           <div className="card p-6">
-            <h2 className="text-xl font-bold mb-6">How The Grand Slam Model Works for Monster Remodeling</h2>
+            <h2 className="text-xl font-bold mb-6">How The Partnership Model Works for Monster Remodeling</h2>
 
             <div className="space-y-8">
               {/* Step 1 */}
@@ -2185,7 +2561,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
               <div className="flex gap-4">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-monster-600 text-white flex items-center justify-center font-bold text-sm">3</div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Year 1: Grand Slam (No Upfront Cost)</h3>
+                  <h3 className="font-semibold text-gray-900">Year 1: Partnership Offer (No Upfront Cost)</h3>
                   <p className="text-gray-600 mt-1">
                     In Year 1, there&apos;s <strong>no Foundation Fee</strong> and <strong>no Sustaining Fee</strong>.
                     Monster only pays Growth Fees on actual revenue increase, using premium rates (higher than Year 2+).
@@ -2512,7 +2888,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
           <div id="ref-y1-tiers" className="card p-6">
             <h3 className="text-lg font-semibold mb-2">Year 1 Premium Growth Fee Tiers</h3>
             <p className="text-sm text-gray-600 mb-4">
-              <strong>Year 1 rates are higher</strong> to compensate for no Foundation or Sustaining fees during Grand Slam. Monster&apos;s {catHeaders[catIdx]?.label} column is highlighted.
+              <strong>Year 1 rates are higher</strong> to compensate for no Foundation or Sustaining fees during the Partnership Offer. Monster&apos;s {catHeaders[catIdx]?.label} column is highlighted.
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm border-collapse">
@@ -2766,7 +3142,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
             <h3 className="text-lg font-semibold mb-4">Monster: Year 1 &rarr; Year 2 Transition</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white rounded-lg p-4 border border-monster-200">
-                <p className="font-semibold text-monster-800 mb-3">YEAR 1 (Grand Slam)</p>
+                <p className="font-semibold text-monster-800 mb-3">YEAR 1 (Partnership Offer)</p>
                 {fullProjection.yearSummaries.length > 0 && (() => {
                   const yr1 = fullProjection.yearSummaries[0]
                   return (
@@ -2775,7 +3151,7 @@ export default function MonsterScenario({ mode }: MonsterScenarioProps) {
                       <p>Growth: {growthLabel} annual</p>
                       <p>Total Revenue: {formatCurrency(yr1.totalRevenue)}</p>
                       <div className="border-t border-gray-200 mt-2 pt-2">
-                        <p className="text-amber-600">Foundation: $0 (Grand Slam)</p>
+                        <p className="text-amber-600">Foundation: $0 (Partnership Offer)</p>
                         <p className="text-monster-600">Sustaining: $0 (Year 1)</p>
                         <p className="text-green-600">Growth Fees: {formatCurrency(yr1.growthFeeTotal)} total</p>
                         <p className="font-bold text-monster-700 mt-1">Total: {formatCurrency(yr1.totalFees)}</p>

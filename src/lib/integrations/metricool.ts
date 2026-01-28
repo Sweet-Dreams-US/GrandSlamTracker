@@ -6,7 +6,7 @@
  * - Sweet Dreams (our business)
  * - Crooked Lake Sandbar Music Festival (management client)
  * - Fort Wayne Direct Primary Care (management client)
- * - MC Sim Racing Fort Wayne (Grand Slam client)
+ * - MC Sim Racing Fort Wayne (Partnership client)
  */
 
 const METRICOOL_API_BASE = 'https://app.metricool.com/api'

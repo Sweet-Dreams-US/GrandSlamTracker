@@ -1,7 +1,9 @@
 'use client'
 
 import { useState } from 'react'
+import Image from 'next/image'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
@@ -58,22 +60,10 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-2xl p-8">
           {/* Logo/Header */}
           <div className="text-center mb-8">
-            <div className="inline-flex items-center justify-center w-16 h-16 bg-blue-600 rounded-full mb-4">
-              <svg
-                className="w-8 h-8 text-white"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M13 10V3L4 14h7v7l9-11h-7z"
-                />
-              </svg>
+            <div className="mb-4">
+              <Image src={sweetDreamsLogo} alt="Sweet Dreams" height={48} className="w-auto mx-auto" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Grand Slam Tracker</h1>
+            <h1 className="text-2xl font-bold text-gray-900">Partnership Tracker</h1>
             <p className="text-gray-500 mt-2">Sweet Dreams Media</p>
           </div>
 

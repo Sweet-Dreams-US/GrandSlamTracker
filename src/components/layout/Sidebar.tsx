@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard,
@@ -9,10 +10,10 @@ import {
   Calculator,
   Bell,
   Settings,
-  TrendingUp,
   FlaskConical,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
+import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
@@ -34,9 +35,8 @@ export default function Sidebar() {
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
       {/* Logo */}
       <div className="h-16 flex items-center px-6 border-b border-gray-200">
-        <Link href="/" className="flex items-center gap-2">
-          <TrendingUp className="h-8 w-8 text-blue-600" />
-          <span className="text-xl font-bold text-gray-900">Grand Slam</span>
+        <Link href="/" className="flex items-center">
+          <Image src={sweetDreamsLogo} alt="Sweet Dreams" height={36} className="w-auto" />
         </Link>
       </div>
 

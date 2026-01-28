@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo, useCallback } from 'react'
-import { Calculator, DollarSign, BarChart3, BookOpen, Lock, Unlock, ChevronDown, ChevronUp, Wifi, WifiOff } from 'lucide-react'
+import { FileSignature, DollarSign, TrendingUp, Megaphone, BarChart3, BookOpen, Sparkles, Lock, Unlock, ChevronDown, ChevronUp, Wifi, WifiOff, ArrowUpCircle, ArrowDownCircle, X, Trash2, Plus } from 'lucide-react'
 import { projectScenario } from '@/lib/calculations/scenarioProjector'
 import { getTierRatesForBaseline, formatGrowthPercentage } from '@/lib/calculations/feeCalculator'
 import { getSeasonalFactors } from '@/lib/constants/seasonalIndices'
@@ -41,12 +41,57 @@ interface Stream {
   monthlyAmount: number
 }
 
+interface BudgetItem {
+  name: string
+  monthlyAmount: number
+}
+
+interface Transaction {
+  id: string
+  type: 'income' | 'expense'
+  account: string
+  amount: number
+  description: string
+  date: string
+}
+
+// ─── Accounting Accounts ─────────────────────────────────────────────────────
+const INCOME_ACCOUNTS = [
+  { value: 'drop-in', label: 'Drop-in Sessions' },
+  { value: 'parties', label: 'Private Parties' },
+  { value: 'memberships', label: 'Memberships' },
+  { value: 'leagues', label: 'League Nights' },
+  { value: 'merchandise', label: 'Merchandise' },
+  { value: 'other-income', label: 'Other Income' },
+]
+
+const EXPENSE_ACCOUNTS = [
+  { value: 'equipment', label: 'Equipment & Repairs' },
+  { value: 'rent', label: 'Rent' },
+  { value: 'utilities', label: 'Utilities' },
+  { value: 'marketing', label: 'Marketing & Ads' },
+  { value: 'payroll', label: 'Payroll' },
+  { value: 'software', label: 'Software & Subscriptions' },
+  { value: 'supplies', label: 'Supplies' },
+  { value: 'insurance', label: 'Insurance' },
+  { value: 'other-expense', label: 'Other Expense' },
+]
+
 // ─── Constants ──────────────────────────────────────────────────────────────
 const DEFAULT_STREAMS: Stream[] = [
   { name: 'Drop-in Sessions', monthlyAmount: 1500 },
   { name: 'Private Parties', monthlyAmount: 1000 },
   { name: 'Memberships', monthlyAmount: 800 },
   { name: 'League Nights', monthlyAmount: 700 },
+]
+
+const DEFAULT_EXPENSES: BudgetItem[] = [
+  { name: 'Rent', monthlyAmount: 2000 },
+  { name: 'Equipment & Repairs', monthlyAmount: 500 },
+  { name: 'Payroll', monthlyAmount: 1500 },
+  { name: 'Marketing & Ads', monthlyAmount: 800 },
+  { name: 'Utilities', monthlyAmount: 300 },
+  { name: 'Insurance', monthlyAmount: 200 },
 ]
 
 const PRESET_SCENARIOS = [
@@ -58,14 +103,24 @@ const PRESET_SCENARIOS = [
   { label: '500%', value: 5.00 },
 ]
 
-const TABS = [
-  { id: 'calculator', label: 'Calculator', icon: Calculator },
+interface Tab {
+  id: string
+  label: string
+  icon: React.ComponentType<{ className?: string }>
+  locked?: boolean
+}
+
+const TABS: Tab[] = [
+  { id: 'contract', label: 'Contract', icon: FileSignature },
   { id: 'financials', label: 'Financials', icon: DollarSign },
+  { id: 'profitability', label: 'Profitability', icon: TrendingUp },
+  { id: 'market-intel', label: 'Market Intel', icon: Megaphone },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
   { id: 'how-it-works', label: 'How It Works', icon: BookOpen },
-] as const
+  { id: 'offer-refiner', label: 'Offer Refiner', icon: Sparkles, locked: true },
+]
 
-type TabId = typeof TABS[number]['id']
+type TabId = 'contract' | 'financials' | 'profitability' | 'market-intel' | 'analytics' | 'how-it-works' | 'offer-refiner'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -109,9 +164,20 @@ export default function MCRacingPage() {
   const [lockDate, setLockDate] = useState<string | null>(null)
   const [inputsPanelOpen, setInputsPanelOpen] = useState(true)
 
+  // ── Expense budget state ──
+  const [expenseBudget, setExpenseBudget] = useState<BudgetItem[]>(DEFAULT_EXPENSES)
+
   // ── UI state ──
-  const [activeTab, setActiveTab] = useState<TabId>('calculator')
+  const [activeTab, setActiveTab] = useState<TabId>('contract')
   const [analyticsMode, setAnalyticsMode] = useState<'demo' | 'live'>('demo')
+
+  // ── Accounting state ──
+  const [transactions, setTransactions] = useState<Transaction[]>([])
+  const [showTransactionForm, setShowTransactionForm] = useState<'income' | 'expense' | null>(null)
+  const [transactionAmount, setTransactionAmount] = useState('')
+  const [transactionAccount, setTransactionAccount] = useState('')
+  const [transactionDescription, setTransactionDescription] = useState('')
+  const [transactionDate, setTransactionDate] = useState(new Date().toISOString().split('T')[0])
 
   // ── Contract lock handler ──
   const toggleLock = useCallback(() => {
@@ -135,6 +201,28 @@ export default function MCRacingPage() {
     setBaseline(sum)
   }
 
+  // ── Expense budget editor ──
+  const updateExpense = (index: number, field: 'name' | 'monthlyAmount', value: string | number) => {
+    if (contractLocked) return
+    const updated = [...expenseBudget]
+    if (field === 'name') updated[index] = { ...updated[index], name: value as string }
+    else updated[index] = { ...updated[index], monthlyAmount: Number(value) }
+    setExpenseBudget(updated)
+  }
+
+  const addExpenseItem = () => {
+    if (contractLocked) return
+    setExpenseBudget([...expenseBudget, { name: '', monthlyAmount: 0 }])
+  }
+
+  const removeExpenseItem = (index: number) => {
+    if (contractLocked) return
+    setExpenseBudget(expenseBudget.filter((_, i) => i !== index))
+  }
+
+  const totalMonthlyExpenses = expenseBudget.reduce((s, e) => s + e.monthlyAmount, 0)
+  const monthlyNetIncome = baseline - totalMonthlyExpenses
+
   const selectPreset = (value: number) => {
     if (contractLocked) return
     setGrowthPercent(value)
@@ -148,6 +236,50 @@ export default function MCRacingPage() {
       setGrowthPercent(val / 100)
     }
   }
+
+  // ── Transaction handlers ──
+  const openTransactionForm = (type: 'income' | 'expense') => {
+    setShowTransactionForm(type)
+    setTransactionAmount('')
+    setTransactionAccount(type === 'income' ? INCOME_ACCOUNTS[0].value : EXPENSE_ACCOUNTS[0].value)
+    setTransactionDescription('')
+    setTransactionDate(new Date().toISOString().split('T')[0])
+  }
+
+  const closeTransactionForm = () => {
+    setShowTransactionForm(null)
+  }
+
+  const addTransaction = () => {
+    if (!transactionAmount || !transactionAccount || !showTransactionForm) return
+    const amount = parseFloat(transactionAmount)
+    if (isNaN(amount) || amount <= 0) return
+
+    const newTransaction: Transaction = {
+      id: Date.now().toString(),
+      type: showTransactionForm,
+      account: transactionAccount,
+      amount,
+      description: transactionDescription,
+      date: transactionDate,
+    }
+    setTransactions(prev => [newTransaction, ...prev])
+    closeTransactionForm()
+  }
+
+  const deleteTransaction = (id: string) => {
+    setTransactions(prev => prev.filter(t => t.id !== id))
+  }
+
+  const getAccountLabel = (type: 'income' | 'expense', value: string) => {
+    const accounts = type === 'income' ? INCOME_ACCOUNTS : EXPENSE_ACCOUNTS
+    return accounts.find(a => a.value === value)?.label || value
+  }
+
+  // ── Accounting calculations ──
+  const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0)
+  const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0)
+  const netCashFlow = totalIncome - totalExpenses
 
   // ── Derived calculations ──
   const monthlyGrowthRate = useMemo(() => Math.pow(1 + growthPercent, 1 / 12) - 1, [growthPercent])
@@ -331,6 +463,55 @@ export default function MCRacingPage() {
               </div>
             </div>
 
+            {/* Expense Budget Editor */}
+            <div>
+              <label className="block text-xs font-medium text-gray-600 mb-1">Monthly Expense Budget</label>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {expenseBudget.map((e, i) => (
+                  <div key={i} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={e.name}
+                      disabled={contractLocked}
+                      onChange={(ev) => updateExpense(i, 'name', ev.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm flex-1 disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                    <input
+                      type="number"
+                      value={e.monthlyAmount}
+                      disabled={contractLocked}
+                      min={0}
+                      step={50}
+                      onChange={(ev) => updateExpense(i, 'monthlyAmount', ev.target.value)}
+                      className="border border-gray-300 rounded-lg px-3 py-1.5 text-sm w-28 disabled:bg-gray-100 disabled:text-gray-500"
+                    />
+                    <button
+                      onClick={() => removeExpenseItem(i)}
+                      disabled={contractLocked}
+                      className="p-1.5 text-gray-400 hover:text-red-600 transition-colors disabled:opacity-50"
+                      title="Remove"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between mt-2">
+                <button
+                  onClick={addExpenseItem}
+                  disabled={contractLocked}
+                  className="flex items-center gap-1 text-sm text-blue-600 hover:text-blue-800 disabled:opacity-50"
+                >
+                  <Plus className="h-4 w-4" /> Add Expense
+                </button>
+                <div className="text-sm text-gray-600">
+                  Total Expenses: <span className="font-semibold text-red-600">{formatCurrency(totalMonthlyExpenses)}/mo</span>
+                  {' | '}
+                  Net Income: <span className={`font-semibold ${monthlyNetIncome >= 0 ? 'text-green-600' : 'text-red-600'}`}>{formatCurrency(monthlyNetIncome)}/mo</span>
+                </div>
+              </div>
+            </div>
+
             {/* Growth Presets + Custom */}
             <div>
               <label className="block text-xs font-medium text-gray-600 mb-1">Annual Growth Target <span className="text-gray-400 font-normal">(compound annual growth %)</span></label>
@@ -421,29 +602,91 @@ export default function MCRacingPage() {
       {/* Tabs */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="border-b border-gray-200">
-        <nav className="flex gap-4">
+        <nav className="flex gap-4 overflow-x-auto">
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
-                activeTab === tab.id
-                  ? 'border-blue-700 text-blue-700'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              onClick={() => !tab.locked && setActiveTab(tab.id as TabId)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab.locked
+                  ? 'border-transparent text-gray-300 cursor-not-allowed'
+                  : activeTab === tab.id
+                    ? 'border-blue-700 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <tab.icon className="h-4 w-4" />
               {tab.label}
+              {tab.locked && <Lock className="h-3 w-3" />}
             </button>
           ))}
         </nav>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 1: Calculator */}
+      {/* TAB 1: Contract */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'calculator' && (
+      {activeTab === 'contract' && (
         <div className="space-y-6">
+          {/* Business Model Setup */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Business Model Setup</h3>
+              <p className="text-xs text-gray-500 mt-1">Edit values in the Customize Scenario panel above</p>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Revenue Streams Summary */}
+              <div>
+                <h4 className="text-sm font-semibold text-green-800 mb-2">Revenue Streams</h4>
+                <div className="space-y-1">
+                  {streams.map((s) => (
+                    <div key={s.name} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{s.name}</span>
+                      <span className="font-medium text-green-700">{formatCurrency(s.monthlyAmount)}/mo</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between text-sm font-semibold">
+                    <span>Total Revenue</span>
+                    <span className="text-green-700">{formatCurrency(baseline)}/mo</span>
+                  </div>
+                </div>
+              </div>
+              {/* Expense Budget Summary */}
+              <div>
+                <h4 className="text-sm font-semibold text-red-800 mb-2">Expense Budget</h4>
+                <div className="space-y-1">
+                  {expenseBudget.map((e) => (
+                    <div key={e.name} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{e.name}</span>
+                      <span className="font-medium text-red-600">{formatCurrency(e.monthlyAmount)}/mo</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between text-sm font-semibold">
+                    <span>Total Expenses</span>
+                    <span className="text-red-600">{formatCurrency(totalMonthlyExpenses)}/mo</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Monthly Summary */}
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-xs text-gray-500">Revenue</p>
+                  <p className="text-lg font-bold text-green-700">{formatCurrency(baseline)}/mo</p>
+                </div>
+                <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+                  <p className="text-xs text-gray-500">Expenses</p>
+                  <p className="text-lg font-bold text-red-600">{formatCurrency(totalMonthlyExpenses)}/mo</p>
+                </div>
+                <div className={`text-center p-3 rounded-lg border ${monthlyNetIncome >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                  <p className="text-xs text-gray-500">Net Income</p>
+                  <p className={`text-lg font-bold ${monthlyNetIncome >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatCurrency(monthlyNetIncome)}/mo</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Table 1A: Scenario Comparison */}
           <div className="card">
             <SectionHeader id="table-1a" label="Table 1A" title="Scenario Comparison (Year 1 - Premium Rates)" />
@@ -487,7 +730,7 @@ export default function MCRacingPage() {
                 <p className="text-xl font-bold text-amber-600">
                   {formatCurrency(y1Projection.summary.totalFoundationFees)}
                 </p>
-                <p className="text-xs text-gray-400">$0 Year 1 (Grand Slam)</p>
+                <p className="text-xs text-gray-400">$0 Year 1 (Partnership Offer)</p>
                 <p className="text-[10px] text-gray-400 mt-1">= Baseline &times; {formatPercent(categoryInfo.foundationFeeRate)} annual</p>
               </div>
               <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-200">
@@ -610,14 +853,7 @@ export default function MCRacingPage() {
               <RevenueChart data={chartData} showBaseline showFee />
             </div>
           </div>
-        </div>
-      )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 2: Financials */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'financials' && (
-        <div className="space-y-6">
           {/* Table 5A: Invoice Breakdown */}
           <div className="card">
             <SectionHeader id="table-5a" label="Table 5A" title="Monthly Invoice Breakdown" />
@@ -685,7 +921,452 @@ export default function MCRacingPage() {
               </table>
             </div>
           </div>
+        </div>
+      )}
 
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 2: Financials */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'financials' && (
+        <div className="space-y-6">
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section A: Transaction Entry */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Transaction Entry</h3>
+            </div>
+            <div className="p-6">
+              {/* Big Action Buttons */}
+              <div className="flex gap-4 mb-6">
+                <button
+                  onClick={() => openTransactionForm('income')}
+                  className="flex-1 flex items-center justify-center gap-3 p-6 bg-green-50 hover:bg-green-100 border-2 border-green-300 hover:border-green-400 rounded-xl transition-all group"
+                >
+                  <ArrowUpCircle className="h-10 w-10 text-green-600 group-hover:scale-110 transition-transform" />
+                  <div className="text-left">
+                    <p className="text-xl font-bold text-green-700">Money In</p>
+                    <p className="text-sm text-green-600">Record income</p>
+                  </div>
+                </button>
+                <button
+                  onClick={() => openTransactionForm('expense')}
+                  className="flex-1 flex items-center justify-center gap-3 p-6 bg-red-50 hover:bg-red-100 border-2 border-red-300 hover:border-red-400 rounded-xl transition-all group"
+                >
+                  <ArrowDownCircle className="h-10 w-10 text-red-600 group-hover:scale-110 transition-transform" />
+                  <div className="text-left">
+                    <p className="text-xl font-bold text-red-700">Money Out</p>
+                    <p className="text-sm text-red-600">Record expense</p>
+                  </div>
+                </button>
+              </div>
+
+              {/* Transaction Form Modal */}
+              {showTransactionForm && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                  <div className="bg-white rounded-xl shadow-2xl w-full max-w-md mx-4">
+                    <div className={`flex items-center justify-between p-4 rounded-t-xl ${showTransactionForm === 'income' ? 'bg-green-600' : 'bg-red-600'}`}>
+                      <div className="flex items-center gap-2 text-white">
+                        {showTransactionForm === 'income' ? (
+                          <ArrowUpCircle className="h-6 w-6" />
+                        ) : (
+                          <ArrowDownCircle className="h-6 w-6" />
+                        )}
+                        <h3 className="text-lg font-bold">
+                          {showTransactionForm === 'income' ? 'Record Income' : 'Record Expense'}
+                        </h3>
+                      </div>
+                      <button onClick={closeTransactionForm} className="text-white/80 hover:text-white">
+                        <X className="h-6 w-6" />
+                      </button>
+                    </div>
+                    <div className="p-6 space-y-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Amount</label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 text-lg">$</span>
+                          <input
+                            type="number"
+                            value={transactionAmount}
+                            onChange={(e) => setTransactionAmount(e.target.value)}
+                            placeholder="0.00"
+                            className="w-full pl-8 pr-4 py-3 text-2xl font-bold border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Account</label>
+                        <select
+                          value={transactionAccount}
+                          onChange={(e) => setTransactionAccount(e.target.value)}
+                          className="w-full px-4 py-3 text-lg border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        >
+                          {(showTransactionForm === 'income' ? INCOME_ACCOUNTS : EXPENSE_ACCOUNTS).map((account) => (
+                            <option key={account.value} value={account.value}>
+                              {account.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                        <input
+                          type="date"
+                          value={transactionDate}
+                          onChange={(e) => setTransactionDate(e.target.value)}
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Description (optional)</label>
+                        <input
+                          type="text"
+                          value={transactionDescription}
+                          onChange={(e) => setTransactionDescription(e.target.value)}
+                          placeholder="What was this for?"
+                          className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      </div>
+                      <button
+                        onClick={addTransaction}
+                        disabled={!transactionAmount || parseFloat(transactionAmount) <= 0}
+                        className={`w-full py-4 text-lg font-bold text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          showTransactionForm === 'income'
+                            ? 'bg-green-600 hover:bg-green-700'
+                            : 'bg-red-600 hover:bg-red-700'
+                        }`}
+                      >
+                        {showTransactionForm === 'income' ? 'Add Income' : 'Add Expense'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Transaction List */}
+              {transactions.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Date</th>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Account</th>
+                        <th className="text-left px-4 py-3 font-medium text-gray-600">Description</th>
+                        <th className="text-right px-4 py-3 font-medium text-gray-600">Amount</th>
+                        <th className="text-center px-4 py-3 font-medium text-gray-600">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {transactions.map((t) => (
+                        <tr key={t.id} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 text-gray-600">{new Date(t.date).toLocaleDateString()}</td>
+                          <td className="px-4 py-3">
+                            <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                              t.type === 'income' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {t.type === 'income' ? <ArrowUpCircle className="h-3 w-3" /> : <ArrowDownCircle className="h-3 w-3" />}
+                              {getAccountLabel(t.type, t.account)}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 text-gray-600">{t.description || '-'}</td>
+                          <td className={`px-4 py-3 text-right font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
+                            {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            <button
+                              onClick={() => deleteTransaction(t.id)}
+                              className="p-1 text-gray-400 hover:text-red-600 transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                  <DollarSign className="h-12 w-12 mx-auto text-gray-300 mb-3" />
+                  <p className="text-gray-500 font-medium">No transactions yet</p>
+                  <p className="text-gray-400 text-sm">Click &quot;Money In&quot; or &quot;Money Out&quot; to get started</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section B: Summary Cards */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="card p-4 text-center">
+              <p className="text-sm text-green-600 font-medium">Total Income</p>
+              <p className="text-2xl font-bold text-green-700">{formatCurrency(totalIncome)}</p>
+            </div>
+            <div className="card p-4 text-center">
+              <p className="text-sm text-red-600 font-medium">Total Expenses</p>
+              <p className="text-2xl font-bold text-red-700">{formatCurrency(totalExpenses)}</p>
+            </div>
+            <div className={`card p-4 text-center`}>
+              <p className={`text-sm font-medium ${netCashFlow >= 0 ? 'text-blue-600' : 'text-orange-600'}`}>Net Cash Flow</p>
+              <p className={`text-2xl font-bold ${netCashFlow >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatCurrency(netCashFlow)}</p>
+            </div>
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section C: Income Statement (P&L) */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Income Statement (P&amp;L)</h3>
+            </div>
+            {transactions.length > 0 ? (
+              <div className="p-6 font-mono text-sm">
+                {/* Revenue section */}
+                <p className="font-bold text-gray-800 mb-2">REVENUE</p>
+                {(() => {
+                  const incomeByAccount: Record<string, number> = {}
+                  transactions.filter(t => t.type === 'income').forEach(t => {
+                    const label = getAccountLabel('income', t.account)
+                    incomeByAccount[label] = (incomeByAccount[label] || 0) + t.amount
+                  })
+                  return Object.entries(incomeByAccount).map(([label, amount]) => (
+                    <div key={label} className="flex justify-between py-0.5 pl-4">
+                      <span className="text-gray-600">{label}</span>
+                      <span className="text-green-700">{formatCurrency(amount)}</span>
+                    </div>
+                  ))
+                })()}
+                <div className="border-t border-gray-300 mt-2 pt-1 flex justify-between pl-4 font-semibold">
+                  <span>Total Revenue</span>
+                  <span className="text-green-700">{formatCurrency(totalIncome)}</span>
+                </div>
+
+                {/* Expenses section */}
+                <p className="font-bold text-gray-800 mt-6 mb-2">EXPENSES</p>
+                {(() => {
+                  const expenseByAccount: Record<string, number> = {}
+                  transactions.filter(t => t.type === 'expense').forEach(t => {
+                    const label = getAccountLabel('expense', t.account)
+                    expenseByAccount[label] = (expenseByAccount[label] || 0) + t.amount
+                  })
+                  return Object.entries(expenseByAccount).map(([label, amount]) => (
+                    <div key={label} className="flex justify-between py-0.5 pl-4">
+                      <span className="text-gray-600">{label}</span>
+                      <span className="text-red-600">{formatCurrency(amount)}</span>
+                    </div>
+                  ))
+                })()}
+                <div className="border-t border-gray-300 mt-2 pt-1 flex justify-between pl-4 font-semibold">
+                  <span>Total Expenses</span>
+                  <span className="text-red-600">{formatCurrency(totalExpenses)}</span>
+                </div>
+
+                {/* Net Income */}
+                <div className="border-t-2 border-gray-800 mt-4 pt-2 flex justify-between font-bold text-base">
+                  <span>NET INCOME</span>
+                  <span className={netCashFlow >= 0 ? 'text-green-700' : 'text-red-700'}>{formatCurrency(netCashFlow)}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400">
+                <p>Record transactions to see reports</p>
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section D: Cash Flow Summary */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Cash Flow Summary</h3>
+            </div>
+            {transactions.length > 0 ? (
+              <div className="p-6">
+                <div className="grid grid-cols-3 gap-4 mb-6">
+                  <div className="p-3 bg-green-50 rounded-lg border border-green-200 text-center">
+                    <p className="text-xs text-gray-500">Operating Cash In</p>
+                    <p className="text-lg font-bold text-green-700">{formatCurrency(totalIncome)}</p>
+                  </div>
+                  <div className="p-3 bg-red-50 rounded-lg border border-red-200 text-center">
+                    <p className="text-xs text-gray-500">Operating Cash Out</p>
+                    <p className="text-lg font-bold text-red-600">{formatCurrency(totalExpenses)}</p>
+                  </div>
+                  <div className={`p-3 rounded-lg border text-center ${netCashFlow >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                    <p className="text-xs text-gray-500">Net Cash Flow</p>
+                    <p className={`text-lg font-bold ${netCashFlow >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatCurrency(netCashFlow)}</p>
+                  </div>
+                </div>
+                {/* Monthly bar chart */}
+                {(() => {
+                  const monthlyData: Record<string, { income: number; expense: number }> = {}
+                  transactions.forEach(t => {
+                    const d = new Date(t.date)
+                    const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+                    if (!monthlyData[key]) monthlyData[key] = { income: 0, expense: 0 }
+                    if (t.type === 'income') monthlyData[key].income += t.amount
+                    else monthlyData[key].expense += t.amount
+                  })
+                  const months = Object.keys(monthlyData).sort()
+                  if (months.length < 2) return null
+                  const maxVal = Math.max(...months.map(m => Math.max(monthlyData[m].income, monthlyData[m].expense)), 1)
+                  return (
+                    <div>
+                      <p className="text-xs font-medium text-gray-600 mb-2">Monthly Cash In / Out</p>
+                      <div className="flex items-end gap-2 h-40">
+                        {months.map(m => {
+                          const d = monthlyData[m]
+                          const label = MONTH_NAMES[parseInt(m.split('-')[1]) - 1] + ' ' + m.split('-')[0].slice(2)
+                          return (
+                            <div key={m} className="flex-1 flex flex-col items-center gap-1">
+                              <div className="w-full flex gap-0.5 items-end" style={{ height: '100%' }}>
+                                <div className="flex-1 bg-green-400 rounded-t" style={{ height: `${(d.income / maxVal) * 100}%`, minHeight: d.income > 0 ? '4px' : '0' }} />
+                                <div className="flex-1 bg-red-400 rounded-t" style={{ height: `${(d.expense / maxVal) * 100}%`, minHeight: d.expense > 0 ? '4px' : '0' }} />
+                              </div>
+                              <p className="text-[10px] text-gray-500">{label}</p>
+                            </div>
+                          )
+                        })}
+                      </div>
+                      <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-400 rounded" /> Income</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-400 rounded" /> Expenses</span>
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400">
+                <p>Record transactions to see reports</p>
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section E: Revenue Breakdown */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Revenue Breakdown</h3>
+            </div>
+            {transactions.filter(t => t.type === 'income').length > 0 ? (
+              <div className="p-6">
+                {(() => {
+                  const incomeByAccount: Record<string, number> = {}
+                  transactions.filter(t => t.type === 'income').forEach(t => {
+                    const label = getAccountLabel('income', t.account)
+                    incomeByAccount[label] = (incomeByAccount[label] || 0) + t.amount
+                  })
+                  const entries = Object.entries(incomeByAccount).sort((a, b) => b[1] - a[1])
+                  const total = entries.reduce((s, [, v]) => s + v, 0)
+                  const colors = ['bg-green-500', 'bg-green-400', 'bg-green-300', 'bg-emerald-500', 'bg-emerald-400', 'bg-teal-400']
+                  return (
+                    <div className="space-y-3">
+                      {/* Stacked bar */}
+                      <div className="flex h-8 rounded-lg overflow-hidden">
+                        {entries.map(([label, amount], i) => (
+                          <div
+                            key={label}
+                            className={`${colors[i % colors.length]} transition-all`}
+                            style={{ width: `${(amount / total) * 100}%` }}
+                            title={`${label}: ${formatCurrency(amount)}`}
+                          />
+                        ))}
+                      </div>
+                      {/* Legend */}
+                      <div className="space-y-2">
+                        {entries.map(([label, amount], i) => (
+                          <div key={label} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-3 h-3 rounded ${colors[i % colors.length]}`} />
+                              <span className="text-gray-700">{label}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium">{formatCurrency(amount)}</span>
+                              <span className="text-gray-400 w-12 text-right">{((amount / total) * 100).toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400">
+                <p>Record transactions to see reports</p>
+              </div>
+            )}
+          </div>
+
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          {/* Section F: Expense Breakdown */}
+          {/* ═══════════════════════════════════════════════════════════════════ */}
+          <div className="card">
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Expense Breakdown</h3>
+            </div>
+            {transactions.filter(t => t.type === 'expense').length > 0 ? (
+              <div className="p-6">
+                {(() => {
+                  const expenseByAccount: Record<string, number> = {}
+                  transactions.filter(t => t.type === 'expense').forEach(t => {
+                    const label = getAccountLabel('expense', t.account)
+                    expenseByAccount[label] = (expenseByAccount[label] || 0) + t.amount
+                  })
+                  const entries = Object.entries(expenseByAccount).sort((a, b) => b[1] - a[1])
+                  const total = entries.reduce((s, [, v]) => s + v, 0)
+                  const colors = ['bg-red-500', 'bg-red-400', 'bg-red-300', 'bg-orange-500', 'bg-orange-400', 'bg-amber-400', 'bg-rose-400', 'bg-pink-400', 'bg-rose-300']
+                  return (
+                    <div className="space-y-3">
+                      {/* Stacked bar */}
+                      <div className="flex h-8 rounded-lg overflow-hidden">
+                        {entries.map(([label, amount], i) => (
+                          <div
+                            key={label}
+                            className={`${colors[i % colors.length]} transition-all`}
+                            style={{ width: `${(amount / total) * 100}%` }}
+                            title={`${label}: ${formatCurrency(amount)}`}
+                          />
+                        ))}
+                      </div>
+                      {/* Legend */}
+                      <div className="space-y-2">
+                        {entries.map(([label, amount], i) => (
+                          <div key={label} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              <span className={`w-3 h-3 rounded ${colors[i % colors.length]}`} />
+                              <span className="text-gray-700">{label}</span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className="font-medium">{formatCurrency(amount)}</span>
+                              <span className="text-gray-400 w-12 text-right">{((amount / total) * 100).toFixed(1)}%</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </div>
+            ) : (
+              <div className="p-8 text-center text-gray-400">
+                <p>Record transactions to see reports</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 3: Profitability */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'profitability' && (
+        <div className="space-y-6">
           {/* How We Both Win — one card per year */}
           {fullProjection.yearSummaries.map((yr) => {
             const isY1 = yr.yearNumber === 1
@@ -699,7 +1380,7 @@ export default function MCRacingPage() {
               <div key={yr.yearNumber} className="card p-6">
                 <h3 className="font-semibold text-blue-900 mb-1">
                   How We Both Win (Year {yr.yearNumber})
-                  {isY1 && <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Grand Slam</span>}
+                  {isY1 && <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Partnership Offer</span>}
                 </h3>
                 <p className="text-xs text-gray-500 mb-4">
                   Baseline: {formatCurrency(yr.startBaseline)}/mo &middot; {growthLabel}
@@ -726,7 +1407,7 @@ export default function MCRacingPage() {
                         <span className="font-medium text-green-600">{formatCurrency(yr.growthFeeTotal)}</span>
                       </div>
                       {isY1 && (
-                        <p className="text-xs text-blue-500 italic">Year 1 Grand Slam: no Foundation or Sustaining fees</p>
+                        <p className="text-xs text-blue-500 italic">Year 1 Partnership Offer: no Foundation or Sustaining fees</p>
                       )}
                       <hr className="border-blue-200" />
                       <div className="flex justify-between font-bold text-blue-800">
@@ -787,7 +1468,7 @@ export default function MCRacingPage() {
                     <p className="font-medium text-gray-700 mb-1">Formula:</p>
                     <p className="font-mono text-xs text-gray-600">ROI = (Revenue Gained - Fees Paid) / Fees Paid</p>
                     <p className="text-gray-500 mt-2">
-                      Our fee structure is performance-based: we only earn more when MC Racing earns more. In Year 1 (Grand Slam),
+                      Our fee structure is performance-based: we only earn more when MC Racing earns more. In Year 1 (Partnership Offer),
                       there are no foundation or sustaining fees &mdash; MC Racing only pays growth fees on actual uplift.
                       For a micro business, high growth rates are needed to make the partnership worthwhile for both sides.
                     </p>
@@ -876,55 +1557,10 @@ export default function MCRacingPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 3: Analytics */}
+      {/* TAB 4: Market Intel */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'analytics' && (
+      {activeTab === 'market-intel' && (
         <div className="space-y-6">
-          {/* Mode Toggle */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setAnalyticsMode('demo')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                analyticsMode === 'demo' ? 'bg-blue-700 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
-              }`}
-            >
-              <WifiOff className="h-4 w-4" /> Demo Mode
-            </button>
-            <button
-              onClick={() => setAnalyticsMode('live')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                analyticsMode === 'live' ? 'bg-blue-700 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
-              }`}
-            >
-              <Wifi className="h-4 w-4" /> Live Mode
-            </button>
-          </div>
-
-          {analyticsMode === 'live' && (
-            <div className="card p-6 bg-blue-50 border-blue-200">
-              <h3 className="font-semibold text-blue-900 mb-4">Connect Real Data Sources</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
-                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-xs">M</div>
-                  <div>
-                    <p className="font-semibold text-blue-900">Connect Metricool</p>
-                    <p className="text-xs text-gray-500">Social media analytics &amp; scheduling</p>
-                    <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
-                  </div>
-                </button>
-                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
-                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold text-xs">Mo</div>
-                  <div>
-                    <p className="font-semibold text-blue-900">Connect Monday.com</p>
-                    <p className="text-xs text-gray-500">Project management &amp; lead tracking</p>
-                    <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
-                  </div>
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-3">When live integrations are active, demo data will be replaced with real metrics.</p>
-            </div>
-          )}
-
           {/* Chart 6A: Marketing Funnel */}
           <div className="card">
             <SectionHeader id="chart-6a" label="Chart 6A" title="Marketing Funnel" />
@@ -1055,6 +1691,58 @@ export default function MCRacingPage() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 5: Analytics */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'analytics' && (
+        <div className="space-y-6">
+          {/* Mode Toggle */}
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setAnalyticsMode('demo')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                analyticsMode === 'demo' ? 'bg-blue-700 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
+              }`}
+            >
+              <WifiOff className="h-4 w-4" /> Demo Mode
+            </button>
+            <button
+              onClick={() => setAnalyticsMode('live')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                analyticsMode === 'live' ? 'bg-blue-700 text-white' : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
+              }`}
+            >
+              <Wifi className="h-4 w-4" /> Live Mode
+            </button>
+          </div>
+
+          {analyticsMode === 'live' && (
+            <div className="card p-6 bg-blue-50 border-blue-200">
+              <h3 className="font-semibold text-blue-900 mb-4">Connect Real Data Sources</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
+                  <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-xs">M</div>
+                  <div>
+                    <p className="font-semibold text-blue-900">Connect Metricool</p>
+                    <p className="text-xs text-gray-500">Social media analytics &amp; scheduling</p>
+                    <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
+                  </div>
+                </button>
+                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold text-xs">Mo</div>
+                  <div>
+                    <p className="font-semibold text-blue-900">Connect Monday.com</p>
+                    <p className="text-xs text-gray-500">Project management &amp; lead tracking</p>
+                    <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
+                  </div>
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mt-3">When live integrations are active, demo data will be replaced with real metrics.</p>
+            </div>
+          )}
 
           {/* Chart 2B: Seasonal Factors */}
           <div className="card p-6">
@@ -1169,7 +1857,7 @@ export default function MCRacingPage() {
         <div className="space-y-6">
           {/* ── 10-Step Walkthrough ── */}
           <div className="card p-6">
-            <h2 className="text-xl font-bold mb-6">How The Grand Slam Model Works for MC Racing</h2>
+            <h2 className="text-xl font-bold mb-6">How The Partnership Model Works for MC Racing</h2>
 
             <div className="space-y-8">
               {/* Step 1 */}
@@ -1207,7 +1895,7 @@ export default function MCRacingPage() {
               <div className="flex gap-4">
                 <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">3</div>
                 <div>
-                  <h3 className="font-semibold text-gray-900">Year 1: Grand Slam (Zero Risk)</h3>
+                  <h3 className="font-semibold text-gray-900">Year 1: Partnership Offer (Zero Risk)</h3>
                   <p className="text-gray-600 mt-1">
                     In Year 1, there&apos;s <strong>no Foundation Fee</strong> and <strong>no Sustaining Fee</strong>.
                     MC Racing only pays when they grow. If marketing doesn&apos;t work, they pay nothing.
@@ -1694,7 +2382,7 @@ export default function MCRacingPage() {
             <h3 className="text-lg font-semibold mb-4">MC Racing: Year 1 &rarr; Year 2 Transition</h3>
             <div className="grid md:grid-cols-2 gap-6">
               <div className="bg-white rounded-lg p-4 border border-blue-200">
-                <p className="font-semibold text-blue-800 mb-3">YEAR 1 (Grand Slam)</p>
+                <p className="font-semibold text-blue-800 mb-3">YEAR 1 (Partnership Offer)</p>
                 {fullProjection.yearSummaries.length > 0 && (() => {
                   const yr1 = fullProjection.yearSummaries[0]
                   return (
@@ -1703,7 +2391,7 @@ export default function MCRacingPage() {
                       <p>Growth: {growthLabel} annual</p>
                       <p>Total Revenue: {formatCurrency(yr1.totalRevenue)}</p>
                       <div className="border-t border-gray-200 mt-2 pt-2">
-                        <p className="text-amber-600">Foundation: $0 (Grand Slam)</p>
+                        <p className="text-amber-600">Foundation: $0 (Partnership Offer)</p>
                         <p className="text-purple-600">Sustaining: $0 (Year 1)</p>
                         <p className="text-green-600">Growth Fees: {formatCurrency(yr1.growthFeeTotal)} total</p>
                         <p className="font-bold text-blue-700 mt-1">Total: {formatCurrency(yr1.totalFees)}</p>
@@ -1769,6 +2457,27 @@ export default function MCRacingPage() {
                 Peak: January (1.20) &middot; Trough: May (0.85) &middot; Indoor activity = winter-dominant. Opposite of outdoor businesses.
               </p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 7: Offer Refiner (Locked) */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'offer-refiner' && (
+        <div className="space-y-6">
+          <div className="card p-12 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+              <Lock className="h-8 w-8 text-gray-400" />
+            </div>
+            <h2 className="text-xl font-bold text-gray-700 mb-2">Offer Refiner</h2>
+            <p className="text-gray-500 max-w-md mx-auto mb-4">
+              AI-powered offer optimization that analyzes your contract terms, market data, and profitability to suggest refined pricing and growth targets.
+            </p>
+            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-semibold bg-purple-100 text-purple-700">
+              <Sparkles className="h-4 w-4" />
+              Coming Soon
+            </span>
           </div>
         </div>
       )}

@@ -46,7 +46,7 @@ export default function ScenariosPage() {
       : inputs.monthlyRevenue < 150000 ? 'Large'
       : 'Enterprise'
 
-    const dealType = inputs.isGrandSlam ? 'Grand Slam' : 'Standard'
+    const dealType = inputs.isGrandSlam ? 'Partnership Offer' : 'Standard'
     const trialInfo = inputs.isGrandSlam ? '(No Y1 Foundation)' : '(Y1 Foundation Fee)'
 
     return {
@@ -65,17 +65,17 @@ export default function ScenariosPage() {
   // Scenario type presets
   const SCENARIO_PRESETS: { name: string; desc: string; settings: Partial<typeof inputs> }[] = [
     {
-      name: 'Grand Slam: Starter Trial',
+      name: 'Partnership: Starter Trial',
       desc: '$0 upfront, small business, needs growth',
       settings: { monthlyRevenue: 8000, isGrandSlam: true, growthRate: 3, projectionMonths: 12, }
     },
     {
-      name: 'Grand Slam: Growth Partner',
+      name: 'Partnership: Growth Partner',
       desc: '$0 upfront, medium business with potential',
       settings: { monthlyRevenue: 35000, isGrandSlam: true, growthRate: 2, projectionMonths: 24, }
     },
     {
-      name: 'Grand Slam: Enterprise',
+      name: 'Partnership: Enterprise',
       desc: 'Large business, performance-based, conservative reset',
       settings: { monthlyRevenue: 125000, isGrandSlam: true, growthRate: 1.5, projectionMonths: 36, }
     },
@@ -340,7 +340,7 @@ export default function ScenariosPage() {
                     className="rounded border-gray-300"
                   />
                   <span className="text-sm flex items-center gap-1">
-                    Grand Slam (No Foundation Fee Year 1)
+                    Partnership Offer (No Foundation Fee Year 1)
                     <Tooltip content={TOOLTIPS.grandSlam} />
                   </span>
                 </label>
@@ -995,7 +995,7 @@ export default function ScenariosPage() {
         <div className="card p-6">
           <h3 className="text-lg font-semibold mb-4">Year 1 Premium Growth Fee Tiers</h3>
           <p className="text-sm text-gray-600 mb-4">
-            <strong>Year 1 rates are higher</strong> to compensate for no Foundation or Sustaining fees in Grand Slam.
+            <strong>Year 1 rates are higher</strong> to compensate for no Foundation or Sustaining fees in the Partnership Offer.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
@@ -1068,7 +1068,7 @@ export default function ScenariosPage() {
           <div className="mt-4 p-3 bg-amber-50 rounded-lg border border-amber-200">
             <p className="text-sm text-amber-800">
               <strong>Year 1 premium rates</strong> are ~5 percentage points higher than Year 2+ to compensate for
-              no Foundation or Sustaining fees during the Grand Slam introductory year.
+              no Foundation or Sustaining fees during the Partnership Offer introductory year.
             </p>
           </div>
         </div>
@@ -1300,13 +1300,13 @@ export default function ScenariosPage() {
 
           <div className="grid md:grid-cols-2 gap-6">
             <div className="bg-white rounded-lg p-4 border border-blue-200">
-              <p className="font-semibold text-blue-800 mb-3">YEAR 1 (Grand Slam)</p>
+              <p className="font-semibold text-blue-800 mb-3">YEAR 1 (Partnership Offer)</p>
               <div className="font-mono text-sm space-y-1">
                 <p>Baseline: $50,000/month</p>
                 <p>Avg Revenue: $65,000/month</p>
                 <p>Avg Uplift: $15,000 (30% growth)</p>
                 <div className="border-t border-gray-200 mt-2 pt-2">
-                  <p className="text-amber-600">Foundation: $0 (Grand Slam)</p>
+                  <p className="text-amber-600">Foundation: $0 (Partnership Offer)</p>
                   <p className="text-purple-600">Sustaining: $0 (Year 1)</p>
                   <p className="text-green-600">Growth Fee: ~$900/mo</p>
                   <p className="font-bold text-primary-700 mt-1">Total: ~$900/month</p>

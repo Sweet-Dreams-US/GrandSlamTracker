@@ -66,6 +66,6 @@ export const TOOLTIPS = {
   industryGrowth: 'Expected annual growth rate for this industry. Used to adjust baseline calculations.',
   uplift: 'Revenue above baseline. This is what Sweet Dreams earns growth fees on.',
   growthTiers: 'Fee rates decrease as growth percentage increases. Rewards high-performing clients with lower marginal rates.',
-  grandSlam: 'Special pricing: No Foundation Fee in Year 1. Client only pays growth fees until Year 2.',
+  grandSlam: 'Partnership Offer: No Foundation Fee in Year 1. Client only pays growth fees until Year 2.',
   projectionMonths: 'How far into the future to project. Longer periods show baseline resets and compounding effects.',
 }

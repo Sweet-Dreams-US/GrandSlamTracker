@@ -33,7 +33,7 @@ export default function UnauthorizedPage() {
 
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
           <p className="text-gray-500 mb-6">
-            Your account is not authorized to access the Grand Slam Tracker.
+            Your account is not authorized to access the Partnership Tracker.
             Contact an administrator if you believe this is an error.
           </p>
 
