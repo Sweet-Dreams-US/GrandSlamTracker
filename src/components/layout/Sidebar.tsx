@@ -11,6 +11,7 @@ import {
   Bell,
   Settings,
   FlaskConical,
+  Banknote,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
@@ -18,7 +19,9 @@ import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
-  { name: 'Financials', href: '/financials', icon: DollarSign },
+  { name: 'Financials', href: '/financials', icon: DollarSign, children: [
+    { name: 'Payouts', href: '/financials/payouts', icon: Banknote },
+  ]},
   { name: 'Scenarios', href: '/scenarios', icon: Calculator },
   { name: 'Alerts', href: '/alerts', icon: Bell },
 ]
@@ -47,18 +50,40 @@ export default function Sidebar() {
             (item.href !== '/' && pathname.startsWith(item.href))
 
           return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                isActive
-                  ? 'bg-blue-50 text-blue-700'
-                  : 'text-gray-700 hover:bg-gray-100'
-              }`}
-            >
-              <item.icon className="h-5 w-5" />
-              {item.name}
-            </Link>
+            <div key={item.name}>
+              <Link
+                href={item.href}
+                className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-blue-50 text-blue-700'
+                    : 'text-gray-700 hover:bg-gray-100'
+                }`}
+              >
+                <item.icon className="h-5 w-5" />
+                {item.name}
+              </Link>
+              {isActive && item.children && (
+                <div className="ml-8 mt-1 space-y-1">
+                  {item.children.map((child) => {
+                    const childActive = pathname === child.href
+                    return (
+                      <Link
+                        key={child.name}
+                        href={child.href}
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                          childActive
+                            ? 'text-blue-700 bg-blue-50'
+                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        <child.icon className="h-3.5 w-3.5" />
+                        {child.name}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
           )
         })}
 

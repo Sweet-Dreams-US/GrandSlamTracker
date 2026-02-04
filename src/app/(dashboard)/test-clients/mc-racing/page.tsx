@@ -86,12 +86,12 @@ const DEFAULT_STREAMS: Stream[] = [
 ]
 
 const DEFAULT_EXPENSES: BudgetItem[] = [
-  { name: 'Rent', monthlyAmount: 2000 },
-  { name: 'Equipment & Repairs', monthlyAmount: 500 },
-  { name: 'Payroll', monthlyAmount: 1500 },
-  { name: 'Marketing & Ads', monthlyAmount: 800 },
-  { name: 'Utilities', monthlyAmount: 300 },
-  { name: 'Insurance', monthlyAmount: 200 },
+  { name: 'Rent', monthlyAmount: 2200 },
+  { name: 'Payroll', monthlyAmount: 1200 },
+  { name: 'Utilities', monthlyAmount: 1000 },
+  { name: 'Equipment & Repairs', monthlyAmount: 200 },
+  { name: 'Marketing & Ads', monthlyAmount: 0 },
+  { name: 'Insurance', monthlyAmount: 150 },
 ]
 
 const PRESET_SCENARIOS = [
@@ -157,8 +157,8 @@ export default function MCRacingPage() {
   const [streams, setStreams] = useState<Stream[]>(DEFAULT_STREAMS)
   const [growthPercent, setGrowthPercent] = useState(1.00)
   const [customGrowth, setCustomGrowth] = useState('')
-  const [startMonth, setStartMonth] = useState(new Date().getMonth() + 1)
-  const [startYear, setStartYear] = useState(new Date().getFullYear())
+  const [startMonth, setStartMonth] = useState(2) // February
+  const [startYear, setStartYear] = useState(2026)
   const [projectionMonths, setProjectionMonths] = useState(12)
   const [contractLocked, setContractLocked] = useState(false)
   const [lockDate, setLockDate] = useState<string | null>(null)
@@ -166,6 +166,10 @@ export default function MCRacingPage() {
 
   // ── Expense budget state ──
   const [expenseBudget, setExpenseBudget] = useState<BudgetItem[]>(DEFAULT_EXPENSES)
+
+  // ── Growth target mode ──
+  const [growthInputMode, setGrowthInputMode] = useState<'percent' | 'revenue'>('percent')
+  const [revenueTarget, setRevenueTarget] = useState('')
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<TabId>('contract')
@@ -235,6 +239,45 @@ export default function MCRacingPage() {
     if (!isNaN(val) && val > 0 && val <= 1000) {
       setGrowthPercent(val / 100)
     }
+  }
+
+  // Binary search for the growth % that makes the projection engine
+  // produce a given total Y1 revenue (accounts for compounding + seasonality)
+  const solveGrowthForTarget = useCallback((targetAnnual: number): number | null => {
+    const baselineAnnual = baseline * 12
+    if (targetAnnual <= baselineAnnual) return null
+    let lo = 0, hi = 10 // Allow up to 1000% growth for sim racing
+    for (let i = 0; i < 50; i++) {
+      const mid = (lo + hi) / 2
+      const mgr = Math.pow(1 + mid, 1 / 12) - 1
+      const proj = projectScenario({
+        baselineRevenue: baseline,
+        industry: 'sim_racing',
+        monthlyGrowthRate: mgr,
+        startMonth,
+        startYear,
+        projectionMonths: 12,
+        isGrandSlam: true,
+        applySeasonality: true,
+      })
+      if (proj.summary.totalProjectedRevenue < targetAnnual) {
+        lo = mid
+      } else {
+        hi = mid
+      }
+    }
+    const result = (lo + hi) / 2
+    return result <= 10 ? result : null
+  }, [baseline, startMonth, startYear])
+
+  const applyRevenueTarget = () => {
+    if (contractLocked) return
+    const targetAnnual = parseFloat(revenueTarget)
+    if (isNaN(targetAnnual)) return
+    const solved = solveGrowthForTarget(targetAnnual)
+    if (solved === null) return
+    setGrowthPercent(solved)
+    setCustomGrowth('')
   }
 
   // ── Transaction handlers ──
@@ -512,43 +555,118 @@ export default function MCRacingPage() {
               </div>
             </div>
 
-            {/* Growth Presets + Custom */}
+            {/* Growth Presets + Custom / Revenue Target Toggle */}
             <div>
-              <label className="block text-xs font-medium text-gray-600 mb-1">Annual Growth Target <span className="text-gray-400 font-normal">(compound annual growth %)</span></label>
-              <div className="flex flex-wrap gap-2">
-                {PRESET_SCENARIOS.map((s) => (
+              <div className="flex items-center gap-3 mb-2">
+                <label className="block text-xs font-medium text-gray-600">Annual Growth Target</label>
+                <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden text-xs">
                   <button
-                    key={s.label}
-                    onClick={() => selectPreset(s.value)}
-                    disabled={contractLocked}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
-                      growthPercent === s.value
-                        ? 'bg-blue-700 text-white'
-                        : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
-                    }`}
+                    onClick={() => setGrowthInputMode('percent')}
+                    className={`px-3 py-1 font-medium transition-colors ${growthInputMode === 'percent' ? 'bg-blue-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   >
-                    {s.label}
+                    Growth %
                   </button>
-                ))}
-                <div className="flex gap-1">
-                  <input
-                    type="number"
-                    placeholder="Custom %"
-                    value={customGrowth}
-                    disabled={contractLocked}
-                    onChange={(e) => setCustomGrowth(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && applyCustomGrowth()}
-                    className="border border-gray-300 rounded-lg px-3 py-2 w-24 text-sm disabled:bg-gray-100"
-                  />
                   <button
-                    onClick={applyCustomGrowth}
-                    disabled={contractLocked}
-                    className="px-3 py-2 rounded-lg text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                    onClick={() => setGrowthInputMode('revenue')}
+                    className={`px-3 py-1 font-medium transition-colors ${growthInputMode === 'revenue' ? 'bg-blue-700 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
                   >
-                    Apply
+                    Revenue Target
                   </button>
                 </div>
+                {growthInputMode === 'revenue' && revenueTarget && growthPercent > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700">
+                    Target: {formatCurrency(parseFloat(revenueTarget))}/yr ({(growthPercent * 100).toFixed(1)}% growth)
+                  </span>
+                )}
               </div>
+
+              {growthInputMode === 'percent' ? (
+                <div className="flex flex-wrap gap-2">
+                  {PRESET_SCENARIOS.map((s) => (
+                    <button
+                      key={s.label}
+                      onClick={() => selectPreset(s.value)}
+                      disabled={contractLocked}
+                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 ${
+                        growthPercent === s.value
+                          ? 'bg-blue-700 text-white'
+                          : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
+                      }`}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                  <div className="flex gap-1">
+                    <input
+                      type="number"
+                      placeholder="Custom %"
+                      value={customGrowth}
+                      disabled={contractLocked}
+                      onChange={(e) => setCustomGrowth(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && applyCustomGrowth()}
+                      className="border border-gray-300 rounded-lg px-3 py-2 w-24 text-sm disabled:bg-gray-100"
+                    />
+                    <button
+                      onClick={applyCustomGrowth}
+                      disabled={contractLocked}
+                      className="px-3 py-2 rounded-lg text-sm bg-blue-100 text-blue-700 hover:bg-blue-200 disabled:opacity-50"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-gray-500">
+                    Current baseline: {formatCurrency(baseline * 12)}/year. Enter your target annual revenue.
+                  </p>
+                  <div className="flex flex-wrap gap-2 items-center">
+                    <div className="flex gap-1">
+                      <span className="flex items-center text-sm text-gray-500 pl-1">$</span>
+                      <input
+                        type="number"
+                        placeholder="e.g. 100000"
+                        value={revenueTarget}
+                        disabled={contractLocked}
+                        onChange={(e) => setRevenueTarget(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && applyRevenueTarget()}
+                        className="border border-gray-300 rounded-lg px-3 py-2 w-36 text-sm disabled:bg-gray-100"
+                      />
+                      <button
+                        onClick={applyRevenueTarget}
+                        disabled={contractLocked}
+                        className="px-3 py-2 rounded-lg text-sm bg-blue-700 text-white hover:bg-blue-800 disabled:opacity-50"
+                      >
+                        Set Target
+                      </button>
+                    </div>
+                    {revenueTarget && !isNaN(parseFloat(revenueTarget)) && parseFloat(revenueTarget) > baseline * 12 && (
+                      <span className="text-xs text-gray-500">
+                        Click &quot;Set Target&quot; to calculate exact growth %
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {[75000, 100000, 150000, 200000, 250000].filter((v) => v > baseline * 12).map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => {
+                          if (contractLocked) return
+                          const solved = solveGrowthForTarget(v)
+                          if (solved === null) return
+                          setGrowthPercent(solved)
+                          setRevenueTarget(String(v))
+                          setCustomGrowth('')
+                        }}
+                        disabled={contractLocked}
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-gray-200 text-gray-700 hover:bg-blue-50 disabled:opacity-50 transition-colors"
+                      >
+                        {formatCurrency(v)}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Start Month/Year + Projection Length */}

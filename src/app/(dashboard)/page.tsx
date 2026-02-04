@@ -9,127 +9,11 @@ import { AlertList } from '@/components/dashboard/AlertBadge'
 import { getClientsWithMetrics, getAlerts, acknowledgeAlert, type ClientWithMetrics } from '@/lib/services'
 import type { Alert } from '@/lib/supabase/types'
 
-// Demo data fallback when database is empty
-const DEMO_CLIENTS: ClientWithMetrics[] = [
-  {
-    id: 'demo-1',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Acme Remodeling',
-    display_name: 'Acme',
-    status: 'active',
-    industry: 'remodeling',
-    business_age_years: 5,
-    primary_contact_name: 'John Smith',
-    primary_contact_email: 'john@acme.com',
-    primary_contact_phone: '555-0100',
-    website_url: 'https://acme-remodeling.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 85000,
-    baseline: 70000,
-    upliftPercent: 21.4,
-    fee: 2250,
-    healthScore: 85,
-    healthGrade: 'A',
-    alertCount: 0,
-  },
-  {
-    id: 'demo-2',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Peak Fitness Center',
-    display_name: 'Peak Fitness',
-    status: 'active',
-    industry: 'fitness',
-    business_age_years: 3,
-    primary_contact_name: 'Sarah Johnson',
-    primary_contact_email: 'sarah@peakfitness.com',
-    primary_contact_phone: '555-0200',
-    website_url: 'https://peakfitness.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 42000,
-    baseline: 35000,
-    upliftPercent: 20.0,
-    fee: 1050,
-    healthScore: 72,
-    healthGrade: 'B',
-    alertCount: 1,
-  },
-  {
-    id: 'demo-3',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Smith & Associates Law',
-    display_name: 'S&A Law',
-    status: 'trial',
-    industry: 'legal',
-    business_age_years: 12,
-    primary_contact_name: 'Michael Smith',
-    primary_contact_email: 'mike@salaw.com',
-    primary_contact_phone: '555-0300',
-    website_url: 'https://salaw.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 65000,
-    baseline: 62000,
-    upliftPercent: 4.8,
-    fee: 480,
-    healthScore: 65,
-    healthGrade: 'C',
-    alertCount: 2,
-  },
-]
-
-const DEMO_ALERTS: Alert[] = [
-  {
-    id: 'demo-alert-1',
-    client_id: 'demo-2',
-    alert_type: 'low_attribution',
-    severity: 'warning',
-    title: 'Low Attribution Rate',
-    message: 'Peak Fitness has only 15% Sweet Dreams attribution this month.',
-    acknowledged: false,
-    acknowledged_at: null,
-    acknowledged_by: null,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'demo-alert-2',
-    client_id: 'demo-3',
-    alert_type: 'trial_ending',
-    severity: 'info',
-    title: 'Trial Ending Soon',
-    message: 'S&A Law trial period ends in 7 days.',
-    acknowledged: false,
-    acknowledged_at: null,
-    acknowledged_by: null,
-    created_at: new Date().toISOString(),
-  },
-  {
-    id: 'demo-alert-3',
-    client_id: 'demo-3',
-    alert_type: 'low_uplift',
-    severity: 'warning',
-    title: 'Low Uplift',
-    message: 'S&A Law uplift is below 10% target.',
-    acknowledged: false,
-    acknowledged_at: null,
-    acknowledged_by: null,
-    created_at: new Date().toISOString(),
-  },
-]
-
 export default function DashboardPage() {
   const [clients, setClients] = useState<ClientWithMetrics[]>([])
   const [alerts, setAlerts] = useState<Alert[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [usingDemoData, setUsingDemoData] = useState(false)
 
   const loadData = async () => {
     try {
@@ -137,23 +21,10 @@ export default function DashboardPage() {
         getClientsWithMetrics(),
         getAlerts({ acknowledged: false, limit: 10 }),
       ])
-
-      // Use demo data if database is empty
-      if (clientsData.length === 0) {
-        setClients(DEMO_CLIENTS)
-        setAlerts(DEMO_ALERTS)
-        setUsingDemoData(true)
-      } else {
-        setClients(clientsData)
-        setAlerts(alertsData)
-        setUsingDemoData(false)
-      }
+      setClients(clientsData)
+      setAlerts(alertsData)
     } catch (error) {
       console.error('Error loading dashboard data:', error)
-      // Fallback to demo data on error
-      setClients(DEMO_CLIENTS)
-      setAlerts(DEMO_ALERTS)
-      setUsingDemoData(true)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -178,21 +49,9 @@ export default function DashboardPage() {
     : 0
 
   const handleAcknowledgeAlert = async (alertId: string) => {
-    if (usingDemoData) {
-      // Handle demo data locally
-      setAlerts((prev) =>
-        prev.map((a) =>
-          a.id === alertId
-            ? { ...a, acknowledged: true, acknowledged_at: new Date().toISOString() }
-            : a
-        )
-      )
-    } else {
-      // Real database update
-      const result = await acknowledgeAlert(alertId)
-      if (result.success) {
-        setAlerts((prev) => prev.filter((a) => a.id !== alertId))
-      }
+    const result = await acknowledgeAlert(alertId)
+    if (result.success) {
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId))
     }
   }
 
@@ -212,11 +71,6 @@ export default function DashboardPage() {
           <h1 className="page-title">Portfolio Dashboard</h1>
           <p className="page-description">
             Overview of client performance and revenue
-            {usingDemoData && (
-              <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                Demo Data
-              </span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -249,7 +103,7 @@ export default function DashboardPage() {
           value={totalProjectedFees}
           format="currency"
           icon={DollarSign}
-          change={12.5}
+          change={0}
           changeLabel="vs last month"
         />
         <SummaryCard
@@ -257,7 +111,7 @@ export default function DashboardPage() {
           value={totalRevenue}
           format="currency"
           icon={TrendingUp}
-          change={8.3}
+          change={0}
           changeLabel="vs last month"
         />
         <SummaryCard
@@ -265,7 +119,7 @@ export default function DashboardPage() {
           value={avgUplift}
           format="percent"
           icon={TrendingUp}
-          change={2.1}
+          change={0}
           changeLabel="vs last month"
         />
       </div>
@@ -284,7 +138,14 @@ export default function DashboardPage() {
                 View All
               </Link>
             </div>
-            <ClientTable clients={clients} />
+            {clients.length === 0 ? (
+              <div className="p-8 text-center text-gray-400">
+                <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">No clients yet. Add your first client to get started.</p>
+              </div>
+            ) : (
+              <ClientTable clients={clients} />
+            )}
           </div>
         </div>
 

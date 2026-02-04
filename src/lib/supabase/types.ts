@@ -710,6 +710,88 @@ export interface Database {
           updated_at?: string
         }
       }
+      payout_records: {
+        Row: {
+          id: string
+          created_at: string
+          deal_type: string
+          client_name: string
+          date: string
+          total_revenue: number
+          business_amount: number
+          sales_amount: number
+          worker_amount: number
+          sales_person: string | null
+          worker_person: string | null
+          tier_used: string | null
+          calculation_details: Json | null
+          notes: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          deal_type: string
+          client_name: string
+          date: string
+          total_revenue: number
+          business_amount: number
+          sales_amount: number
+          worker_amount: number
+          sales_person?: string | null
+          worker_person?: string | null
+          tier_used?: string | null
+          calculation_details?: Json | null
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          deal_type?: string
+          client_name?: string
+          date?: string
+          total_revenue?: number
+          business_amount?: number
+          sales_amount?: number
+          worker_amount?: number
+          sales_person?: string | null
+          worker_person?: string | null
+          tier_used?: string | null
+          calculation_details?: Json | null
+          notes?: string | null
+        }
+      }
+      payout_transactions: {
+        Row: {
+          id: string
+          payout_record_id: string
+          created_at: string
+          transaction_type: 'deposit_received' | 'payment_to_sales' | 'payment_to_worker' | 'payment_to_business'
+          amount: number
+          recipient: string | null
+          description: string | null
+          date: string
+        }
+        Insert: {
+          id?: string
+          payout_record_id: string
+          created_at?: string
+          transaction_type: 'deposit_received' | 'payment_to_sales' | 'payment_to_worker' | 'payment_to_business'
+          amount: number
+          recipient?: string | null
+          description?: string | null
+          date: string
+        }
+        Update: {
+          id?: string
+          payout_record_id?: string
+          created_at?: string
+          transaction_type?: 'deposit_received' | 'payment_to_sales' | 'payment_to_worker' | 'payment_to_business'
+          amount?: number
+          recipient?: string | null
+          description?: string | null
+          date?: string
+        }
+      }
       admins: {
         Row: {
           id: string
@@ -777,4 +859,6 @@ export type Integration = Tables<'integrations'>
 export type Alert = Tables<'alerts'>
 export type DriveLink = Tables<'drive_links'>
 export type SavedScenario = Tables<'saved_scenarios'>
+export type PayoutRecord = Tables<'payout_records'>
+export type PayoutTransaction = Tables<'payout_transactions'>
 export type Admin = Tables<'admins'>

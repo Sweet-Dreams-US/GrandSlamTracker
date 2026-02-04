@@ -296,6 +296,39 @@ CREATE TABLE IF NOT EXISTS saved_scenarios (
 );
 
 -- =====================
+-- PAYOUT RECORDS (Deal-level payouts - not tied to monthly_revenue)
+-- =====================
+
+CREATE TABLE IF NOT EXISTS payout_records (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  deal_type TEXT NOT NULL,
+  client_name TEXT NOT NULL,
+  date DATE NOT NULL,
+  total_revenue DECIMAL NOT NULL,
+  business_amount DECIMAL NOT NULL,
+  sales_amount DECIMAL NOT NULL,
+  worker_amount DECIMAL NOT NULL,
+  sales_person TEXT,
+  worker_person TEXT,
+  tier_used TEXT,
+  calculation_details JSONB,
+  notes TEXT
+);
+
+-- Payout transactions (ledger per payout record)
+CREATE TABLE IF NOT EXISTS payout_transactions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  payout_record_id UUID NOT NULL REFERENCES payout_records(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  transaction_type TEXT NOT NULL CHECK (transaction_type IN ('deposit_received', 'payment_to_sales', 'payment_to_worker', 'payment_to_business')),
+  amount DECIMAL NOT NULL,
+  recipient TEXT,
+  description TEXT,
+  date DATE NOT NULL
+);
+
+-- =====================
 -- INDEXES
 -- =====================
 
@@ -309,6 +342,10 @@ CREATE INDEX IF NOT EXISTS idx_daily_metrics_client_date ON daily_metrics(client
 CREATE INDEX IF NOT EXISTS idx_alerts_client ON alerts(client_id);
 CREATE INDEX IF NOT EXISTS idx_alerts_acknowledged ON alerts(acknowledged);
 CREATE INDEX IF NOT EXISTS idx_activity_log_client_date ON activity_log(client_id, date);
+CREATE INDEX IF NOT EXISTS idx_payout_records_date ON payout_records(date);
+CREATE INDEX IF NOT EXISTS idx_payout_records_deal_type ON payout_records(deal_type);
+CREATE INDEX IF NOT EXISTS idx_payout_transactions_record ON payout_transactions(payout_record_id);
+CREATE INDEX IF NOT EXISTS idx_payout_transactions_date ON payout_transactions(date);
 
 -- =====================
 -- FUNCTIONS
@@ -438,6 +475,8 @@ ALTER TABLE integrations ENABLE ROW LEVEL SECURITY;
 ALTER TABLE alerts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE drive_links ENABLE ROW LEVEL SECURITY;
 ALTER TABLE saved_scenarios ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payout_records ENABLE ROW LEVEL SECURITY;
+ALTER TABLE payout_transactions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE admins ENABLE ROW LEVEL SECURITY;
 
 -- Policy: Only authenticated admins can access data
@@ -494,6 +533,12 @@ CREATE POLICY "Admins access" ON drive_links FOR ALL USING (
   EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
 );
 CREATE POLICY "Admins access" ON saved_scenarios FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON payout_records FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+CREATE POLICY "Admins access" ON payout_transactions FOR ALL USING (
   EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
 );
 

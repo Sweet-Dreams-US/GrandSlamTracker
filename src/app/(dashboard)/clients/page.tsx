@@ -2,105 +2,9 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Plus, Search, Filter, RefreshCw } from 'lucide-react'
+import { Plus, Search, Filter, RefreshCw, Users } from 'lucide-react'
 import ClientTable from '@/components/dashboard/ClientTable'
 import { getClientsWithMetrics, type ClientWithMetrics } from '@/lib/services'
-
-// Demo data fallback
-const DEMO_CLIENTS: ClientWithMetrics[] = [
-  {
-    id: 'demo-1',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Acme Remodeling',
-    display_name: 'Acme',
-    status: 'active',
-    industry: 'remodeling',
-    business_age_years: 5,
-    primary_contact_name: 'John Smith',
-    primary_contact_email: 'john@acme.com',
-    primary_contact_phone: '555-0100',
-    website_url: 'https://acme-remodeling.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 85000,
-    baseline: 70000,
-    upliftPercent: 21.4,
-    fee: 2250,
-    healthGrade: 'A',
-    alertCount: 0,
-  },
-  {
-    id: 'demo-2',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Peak Fitness Center',
-    display_name: 'Peak Fitness',
-    status: 'active',
-    industry: 'fitness',
-    business_age_years: 3,
-    primary_contact_name: 'Sarah Johnson',
-    primary_contact_email: 'sarah@peakfitness.com',
-    primary_contact_phone: '555-0200',
-    website_url: 'https://peakfitness.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 42000,
-    baseline: 35000,
-    upliftPercent: 20.0,
-    fee: 1050,
-    healthGrade: 'B',
-    alertCount: 1,
-  },
-  {
-    id: 'demo-3',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Smith & Associates Law',
-    display_name: 'S&A Law',
-    status: 'trial',
-    industry: 'legal',
-    business_age_years: 12,
-    primary_contact_name: 'Michael Smith',
-    primary_contact_email: 'mike@salaw.com',
-    primary_contact_phone: '555-0300',
-    website_url: 'https://salaw.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 65000,
-    baseline: 62000,
-    upliftPercent: 4.8,
-    fee: 480,
-    healthGrade: 'C',
-    alertCount: 2,
-  },
-  {
-    id: 'demo-4',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-    business_name: 'Coastal HVAC Services',
-    display_name: 'Coastal HVAC',
-    status: 'paused',
-    industry: 'hvac',
-    business_age_years: 8,
-    primary_contact_name: 'David Lee',
-    primary_contact_email: 'david@coastalhvac.com',
-    primary_contact_phone: '555-0400',
-    website_url: 'https://coastalhvac.com',
-    notes: null,
-    metricool_brand_id: null,
-    metricool_brand_name: null,
-    monthlyRevenue: 0,
-    baseline: 55000,
-    upliftPercent: 0,
-    fee: 0,
-    healthGrade: 'D',
-    alertCount: 0,
-  },
-]
 
 export default function ClientsPage() {
   const [searchQuery, setSearchQuery] = useState('')
@@ -108,22 +12,13 @@ export default function ClientsPage() {
   const [clients, setClients] = useState<ClientWithMetrics[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [usingDemoData, setUsingDemoData] = useState(false)
 
   const loadClients = async () => {
     try {
       const data = await getClientsWithMetrics()
-      if (data.length === 0) {
-        setClients(DEMO_CLIENTS)
-        setUsingDemoData(true)
-      } else {
-        setClients(data)
-        setUsingDemoData(false)
-      }
+      setClients(data)
     } catch (error) {
       console.error('Error loading clients:', error)
-      setClients(DEMO_CLIENTS)
-      setUsingDemoData(true)
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -166,11 +61,6 @@ export default function ClientsPage() {
           <h1 className="page-title">Clients</h1>
           <p className="page-description">
             Manage your client portfolio
-            {usingDemoData && (
-              <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded">
-                Demo Data
-              </span>
-            )}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -232,7 +122,14 @@ export default function ClientsPage() {
 
       {/* Client Table */}
       <div className="card">
-        <ClientTable clients={filteredClients} />
+        {clients.length === 0 ? (
+          <div className="p-8 text-center text-gray-400">
+            <Users className="h-8 w-8 mx-auto mb-2 opacity-50" />
+            <p className="text-sm">No clients yet. Add your first client to get started.</p>
+          </div>
+        ) : (
+          <ClientTable clients={filteredClients} />
+        )}
       </div>
     </div>
   )
