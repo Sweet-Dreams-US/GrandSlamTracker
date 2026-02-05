@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useMemo, useCallback } from 'react'
-import { FileSignature, DollarSign, TrendingUp, Megaphone, BarChart3, BookOpen, Sparkles, Lock, Unlock, ChevronDown, ChevronUp, Wifi, WifiOff, ArrowUpCircle, ArrowDownCircle, X, Trash2, Plus, LogOut } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { FileSignature, DollarSign, TrendingUp, Megaphone, BarChart3, BookOpen, Sparkles, Lock, ChevronDown, ChevronUp, Wifi, WifiOff, LogOut } from 'lucide-react'
 import { projectScenario } from '@/lib/calculations/scenarioProjector'
 import { getTierRatesForBaseline, formatGrowthPercentage } from '@/lib/calculations/feeCalculator'
 import { getSeasonalFactors } from '@/lib/constants/seasonalIndices'
 import { RETENTION_BRACKETS } from '@/lib/constants/feeStructure'
 import RevenueChart from '@/components/charts/RevenueChart'
-import { useEffect } from 'react'
 
 // ─── Password Gate ──────────────────────────────────────────────────────────
 function PasswordGate({ children }: { children: React.ReactNode }) {
@@ -148,37 +147,6 @@ interface BudgetItem {
   monthlyAmount: number
 }
 
-interface Transaction {
-  id: string
-  type: 'income' | 'expense'
-  account: string
-  amount: number
-  description: string
-  date: string
-}
-
-// ─── Accounting Accounts ─────────────────────────────────────────────────────
-const INCOME_ACCOUNTS = [
-  { value: 'drop-in', label: 'Drop-in Sessions' },
-  { value: 'parties', label: 'Private Parties' },
-  { value: 'memberships', label: 'Memberships' },
-  { value: 'leagues', label: 'League Nights' },
-  { value: 'merchandise', label: 'Merchandise' },
-  { value: 'other-income', label: 'Other Income' },
-]
-
-const EXPENSE_ACCOUNTS = [
-  { value: 'equipment', label: 'Equipment & Repairs' },
-  { value: 'rent', label: 'Rent' },
-  { value: 'utilities', label: 'Utilities' },
-  { value: 'marketing', label: 'Marketing & Ads' },
-  { value: 'payroll', label: 'Payroll' },
-  { value: 'software', label: 'Software & Subscriptions' },
-  { value: 'supplies', label: 'Supplies' },
-  { value: 'insurance', label: 'Insurance' },
-  { value: 'other-expense', label: 'Other Expense' },
-]
-
 // ─── Constants ──────────────────────────────────────────────────────────────
 const DEFAULT_STREAMS: Stream[] = [
   { name: 'Drop-in Sessions', monthlyAmount: 1500 },
@@ -214,7 +182,6 @@ interface Tab {
 
 const TABS: Tab[] = [
   { id: 'contract', label: 'Contract', icon: FileSignature },
-  { id: 'financials', label: 'Financials', icon: DollarSign },
   { id: 'profitability', label: 'Profitability', icon: TrendingUp },
   { id: 'market-intel', label: 'Market Intel', icon: Megaphone },
   { id: 'analytics', label: 'Analytics', icon: BarChart3 },
@@ -222,7 +189,7 @@ const TABS: Tab[] = [
   { id: 'offer-refiner', label: 'Offer Refiner', icon: Sparkles, locked: true },
 ]
 
-type TabId = 'contract' | 'financials' | 'profitability' | 'market-intel' | 'analytics' | 'how-it-works' | 'offer-refiner'
+type TabId = 'contract' | 'profitability' | 'market-intel' | 'analytics' | 'how-it-works' | 'offer-refiner'
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
@@ -252,235 +219,275 @@ const MOCK_SOCIAL_SEO = {
   reviews: { googleRating: 4.9, reviewCount: 67, responseRate: 100 },
 }
 
-// ─── Main Component ────────────────────────────────────────────────────
+// ─── Main Content Component ────────────────────────────────────────────────
 function MCRacingContent() {
-  // ── Editable state ──
-  const [baseline, setBaseline] = useState(4000)
-  const [streams, setStreams] = useState<Stream[]>(DEFAULT_STREAMS)
-  const [growthPercent, setGrowthPercent] = useState(1.00)
-  const [customGrowth, setCustomGrowth] = useState('')
-  const [startMonth, setStartMonth] = useState(2) // February
-  const [expenseBudget, setExpenseBudget] = useState<BudgetItem[]>(DEFAULT_EXPENSES)
-
-  // ── Financials tab state ──
-  const [transactions, setTransactions] = useState<Transaction[]>([])
-  const [showAddTransaction, setShowAddTransaction] = useState(false)
-  const [newTransaction, setNewTransaction] = useState<Omit<Transaction, 'id'>>({
-    type: 'income',
-    account: '',
-    amount: 0,
-    description: '',
-    date: new Date().toISOString().split('T')[0]
-  })
+  // ── Fixed contract values (view-only for client) ──
+  const baseline = 4000
+  const streams = DEFAULT_STREAMS
+  const growthPercent = 1.00 // 100% growth target
+  const startMonth = 2 // February
+  const startYear = 2026
+  const projectionMonths = 24
+  const expenseBudget = DEFAULT_EXPENSES
 
   // ── UI state ──
   const [activeTab, setActiveTab] = useState<TabId>('contract')
-  const [showProjections, setShowProjections] = useState(false)
   const [analyticsMode, setAnalyticsMode] = useState<'demo' | 'live'>('demo')
+  const [showProjections, setShowProjections] = useState(false)
 
-  // ── Projected revenue (Y1) ──
-  const totalMonthlyRevenue = streams.reduce((sum, s) => sum + s.monthlyAmount, 0)
-  const annualRevenue = totalMonthlyRevenue * 12
+  // ── Expense calculations ──
+  const totalMonthlyExpenses = expenseBudget.reduce((s, e) => s + e.monthlyAmount, 0)
+  const monthlyNetIncome = baseline - totalMonthlyExpenses
 
-  // ── Fee rates ──
-  const tierRates = useMemo(() => getTierRatesForBaseline(baseline), [baseline])
+  // ── Derived calculations ──
+  const monthlyGrowthRate = useMemo(() => Math.pow(1 + growthPercent, 1 / 12) - 1, [growthPercent])
 
-  // ── Expense Budget Calculations ──
-  const totalMonthlyExpenses = expenseBudget.reduce((sum, e) => sum + e.monthlyAmount, 0)
-  const annualExpenses = totalMonthlyExpenses * 12
-  const projectedNetProfit = annualRevenue - annualExpenses
+  const categoryInfo = useMemo(() => getTierRatesForBaseline(baseline), [baseline])
+  const y1CategoryInfo = useMemo(() => getTierRatesForBaseline(baseline, true), [baseline])
+  const seasonalFactors = getSeasonalFactors('sim_racing')
 
-  // ── Multi-year projections ──
-  const fullProjection = useMemo(() => {
-    return projectScenario({
-      baseline,
-      growthPercent,
+  const y1Projection = useMemo(() => projectScenario({
+    baselineRevenue: baseline,
+    industry: 'sim_racing',
+    monthlyGrowthRate,
+    startMonth,
+    startYear,
+    projectionMonths: 12,
+    isGrandSlam: true,
+    applySeasonality: true,
+  }), [monthlyGrowthRate, startMonth, startYear])
+
+  const fullProjection = useMemo(() => projectScenario({
+    baselineRevenue: baseline,
+    industry: 'sim_racing',
+    monthlyGrowthRate,
+    startMonth,
+    startYear,
+    projectionMonths: Math.max(projectionMonths, 24),
+    isGrandSlam: true,
+    applySeasonality: true,
+  }), [monthlyGrowthRate, startMonth, startYear, projectionMonths])
+
+  const chartData = useMemo(() => y1Projection.projections.map((p) => ({
+    month: p.monthLabel.split(' ')[0],
+    revenue: p.projectedRevenue,
+    baseline: p.currentBaseline,
+    fee: p.totalMonthlyFee,
+  })), [y1Projection])
+
+  const scenarioComparisons = useMemo(() => PRESET_SCENARIOS.map((s) => {
+    const mgr = Math.pow(1 + s.value, 1 / 12) - 1
+    const proj = projectScenario({
+      baselineRevenue: baseline,
+      industry: 'sim_racing',
+      monthlyGrowthRate: mgr,
       startMonth,
-      numYears: 5,
+      startYear,
+      projectionMonths: 12,
+      isGrandSlam: true,
+      applySeasonality: true,
     })
-  }, [baseline, growthPercent, startMonth])
-
-  // ── Transaction handlers ──
-  const handleAddTransaction = useCallback(() => {
-    if (!newTransaction.account || newTransaction.amount <= 0) return
-    const transaction: Transaction = {
-      ...newTransaction,
-      id: Date.now().toString()
+    return {
+      label: `${s.value * 100}% Growth`,
+      growthPercent: s.value,
+      totalRevenue: proj.summary.totalProjectedRevenue,
+      totalFees: proj.summary.totalFees,
+      avgMonthlyFee: proj.summary.avgMonthlyFee,
+      effectiveRate: proj.summary.avgEffectiveRate,
+      clientKeeps: proj.summary.totalProjectedRevenue - proj.summary.totalFees,
     }
-    setTransactions(prev => [...prev, transaction])
-    setNewTransaction({
-      type: 'income',
-      account: '',
-      amount: 0,
-      description: '',
-      date: new Date().toISOString().split('T')[0]
-    })
-    setShowAddTransaction(false)
-  }, [newTransaction])
+  }), [startMonth, startYear])
 
-  const handleDeleteTransaction = useCallback((id: string) => {
-    setTransactions(prev => prev.filter(t => t.id !== id))
-  }, [])
+  const growthLabel = `${Math.round(growthPercent * 100)}% Growth`
 
-  // ── Transaction summaries ──
-  const transactionSummary = useMemo(() => {
-    const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0)
-    const totalExpenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0)
-    return { totalIncome, totalExpenses, net: totalIncome - totalExpenses }
-  }, [transactions])
-
-  // ── Marketing metrics ──
-  const totalAdSpend = MOCK_AD_CHANNELS.reduce((sum, c) => sum + c.spend, 0)
+  // ── Marketing ROI calc ──
+  const totalAdSpend = MOCK_AD_CHANNELS.reduce((s, c) => s + c.spend, 0)
   const marketingROAS = ((MOCK_FUNNEL.revenue - baseline) / totalAdSpend).toFixed(1)
-
-  // ── Custom growth handler ──
-  const handleCustomGrowth = useCallback(() => {
-    const val = parseFloat(customGrowth)
-    if (!isNaN(val) && val >= 0) {
-      setGrowthPercent(val / 100)
-      setCustomGrowth('')
-    }
-  }, [customGrowth])
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       {/* Header */}
-      <div className="max-w-6xl mx-auto mb-8">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">MC Racing</h1>
-            <p className="text-gray-500 mt-1">Partnership Performance Dashboard</p>
-          </div>
-          <div className="text-right">
-            <p className="text-sm text-gray-500">Contract Start</p>
-            <p className="font-semibold text-gray-900">{MONTH_NAMES[startMonth]} 2025</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Tab Navigation */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
       <div className="max-w-6xl mx-auto mb-6">
-        <div className="flex flex-wrap gap-2">
-          {TABS.map((tab) => {
-            const Icon = tab.icon
-            const isActive = activeTab === tab.id
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as TabId)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-blue-700 text-white'
-                    : 'bg-white border border-gray-200 text-gray-700 hover:bg-blue-50'
-                } ${tab.locked ? 'opacity-60' : ''}`}
-              >
-                <Icon className="h-4 w-4" />
-                {tab.label}
-                {tab.locked && <Lock className="h-3 w-3 ml-1" />}
-              </button>
-            )
-          })}
+        <div className="card p-6 bg-gradient-to-r from-blue-700 to-purple-700 text-white">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-3">
+                <h1 className="text-2xl font-bold">MC Racing</h1>
+                <span className="flex items-center gap-1 px-2 py-1 rounded bg-green-500/80 text-xs font-bold">
+                  <Lock className="h-3 w-3" /> CONTRACT ACTIVE
+                </span>
+              </div>
+              <p className="text-blue-200">Fort Wayne, IN &middot; Sim Racing &middot; {categoryInfo.categoryLabel}</p>
+              <div className="flex flex-wrap gap-3 mt-2">
+                <span className="text-sm bg-white/20 px-2 py-1 rounded">
+                  Baseline: {formatCurrency(baseline)}/mo
+                </span>
+                <span className="text-sm bg-white/20 px-2 py-1 rounded">
+                  Growth Target: {growthLabel}
+                </span>
+                <span className="text-sm bg-white/20 px-2 py-1 rounded">
+                  Start: {MONTH_NAMES[startMonth - 1]} {startYear}
+                </span>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-sm text-blue-200">Revenue Streams</p>
+              {streams.map((s) => (
+                <p key={s.name} className="text-sm">{s.name}: {formatCurrency(s.monthlyAmount)}</p>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 1: Contract Overview */}
+      {/* Tabs */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      <div className="max-w-6xl mx-auto mb-6 border-b border-gray-200">
+        <nav className="flex gap-4 overflow-x-auto">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => !tab.locked && setActiveTab(tab.id as TabId)}
+              className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+                tab.locked
+                  ? 'border-transparent text-gray-300 cursor-not-allowed'
+                  : activeTab === tab.id
+                    ? 'border-blue-700 text-blue-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <tab.icon className="h-4 w-4" />
+              {tab.label}
+              {tab.locked && <Lock className="h-3 w-3" />}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 1: Contract */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'contract' && (
         <div className="max-w-6xl mx-auto space-y-6">
-          {/* Key Metrics */}
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="card p-6 bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-              <p className="text-blue-100 text-sm font-medium">Monthly Baseline</p>
-              <p className="text-3xl font-bold mt-1">{formatCurrency(baseline)}</p>
-            </div>
-            <div className="card p-6">
-              <p className="text-gray-500 text-sm font-medium">Growth Target</p>
-              <p className="text-3xl font-bold text-blue-700 mt-1">{formatPercent(growthPercent)}</p>
-            </div>
-            <div className="card p-6">
-              <p className="text-gray-500 text-sm font-medium">Foundation Fee</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{formatCurrency(tierRates.foundationFee)}</p>
-              <p className="text-xs text-gray-400 mt-1">{formatPercent(tierRates.foundationFeePercent)} of baseline</p>
-            </div>
-            <div className="card p-6">
-              <p className="text-gray-500 text-sm font-medium">Growth Fee Rate</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{formatPercent(tierRates.growthFeePercent)}</p>
-              <p className="text-xs text-gray-400 mt-1">On revenue above baseline</p>
-            </div>
-          </div>
-
-          {/* Revenue Streams */}
+          {/* Business Model Setup */}
           <div className="card">
-            <SectionHeader id="sec-streams" label="A" title="Revenue Streams" />
-            <div className="p-6">
-              <div className="space-y-3">
-                {streams.map((stream, idx) => (
-                  <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <span className="text-gray-700">{stream.name}</span>
-                    <span className="font-semibold text-gray-900">{formatCurrency(stream.monthlyAmount)}/mo</span>
+            <div className="p-4 border-b border-gray-200">
+              <h3 className="font-semibold">Business Model Overview</h3>
+            </div>
+            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Revenue Streams Summary */}
+              <div>
+                <h4 className="text-sm font-semibold text-green-800 mb-2">Revenue Streams</h4>
+                <div className="space-y-1">
+                  {streams.map((s) => (
+                    <div key={s.name} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{s.name}</span>
+                      <span className="font-medium text-green-700">{formatCurrency(s.monthlyAmount)}/mo</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between text-sm font-semibold">
+                    <span>Total Revenue</span>
+                    <span className="text-green-700">{formatCurrency(baseline)}/mo</span>
                   </div>
-                ))}
+                </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between">
-                <span className="font-semibold text-gray-700">Total Monthly Revenue</span>
-                <span className="font-bold text-blue-700 text-lg">{formatCurrency(totalMonthlyRevenue)}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Expense Budget */}
-          <div className="card">
-            <SectionHeader id="sec-expenses" label="B" title="Monthly Expense Budget" />
-            <div className="p-6">
-              <div className="space-y-3">
-                {expenseBudget.map((expense, idx) => (
-                  <div key={idx} className="flex items-center justify-between py-2 border-b border-gray-100 last:border-0">
-                    <span className="text-gray-700">{expense.name}</span>
-                    <span className="font-semibold text-gray-900">{formatCurrency(expense.monthlyAmount)}/mo</span>
+              {/* Expense Budget Summary */}
+              <div>
+                <h4 className="text-sm font-semibold text-red-800 mb-2">Expense Budget</h4>
+                <div className="space-y-1">
+                  {expenseBudget.map((e) => (
+                    <div key={e.name} className="flex justify-between text-sm">
+                      <span className="text-gray-600">{e.name}</span>
+                      <span className="font-medium text-red-600">{formatCurrency(e.monthlyAmount)}/mo</span>
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-200 pt-1 mt-1 flex justify-between text-sm font-semibold">
+                    <span>Total Expenses</span>
+                    <span className="text-red-600">{formatCurrency(totalMonthlyExpenses)}/mo</span>
                   </div>
-                ))}
+                </div>
               </div>
-              <div className="mt-4 pt-4 border-t border-gray-200 flex justify-between">
-                <span className="font-semibold text-gray-700">Total Monthly Expenses</span>
-                <span className="font-bold text-red-600 text-lg">{formatCurrency(totalMonthlyExpenses)}</span>
+            </div>
+            {/* Monthly Summary */}
+            <div className="px-4 pb-4">
+              <div className="grid grid-cols-3 gap-4">
+                <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                  <p className="text-xs text-gray-500">Revenue</p>
+                  <p className="text-lg font-bold text-green-700">{formatCurrency(baseline)}/mo</p>
+                </div>
+                <div className="text-center p-3 bg-red-50 rounded-lg border border-red-200">
+                  <p className="text-xs text-gray-500">Expenses</p>
+                  <p className="text-lg font-bold text-red-600">{formatCurrency(totalMonthlyExpenses)}/mo</p>
+                </div>
+                <div className={`text-center p-3 rounded-lg border ${monthlyNetIncome >= 0 ? 'bg-blue-50 border-blue-200' : 'bg-orange-50 border-orange-200'}`}>
+                  <p className="text-xs text-gray-500">Net Income</p>
+                  <p className={`text-lg font-bold ${monthlyNetIncome >= 0 ? 'text-blue-700' : 'text-orange-700'}`}>{formatCurrency(monthlyNetIncome)}/mo</p>
+                </div>
               </div>
             </div>
           </div>
 
-          {/* Growth Scenarios */}
+          {/* Table 1A: Scenario Comparison */}
           <div className="card">
-            <SectionHeader id="sec-scenarios" label="C" title="Growth Scenario Selector" />
-            <div className="p-6">
-              <div className="flex flex-wrap gap-2 mb-4">
-                {PRESET_SCENARIOS.map((scenario) => (
-                  <button
-                    key={scenario.value}
-                    onClick={() => setGrowthPercent(scenario.value)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                      growthPercent === scenario.value
-                        ? 'bg-blue-700 text-white'
-                        : 'bg-gray-100 text-gray-700 hover:bg-blue-50'
-                    }`}
-                  >
-                    {scenario.label}
-                  </button>
-                ))}
+            <SectionHeader id="table-1a" label="Table 1A" title="Scenario Comparison (Year 1 - Premium Rates)" />
+            <p className="px-4 py-2 text-xs text-gray-500 bg-blue-50 border-b border-blue-100">
+              Formula: Uplift &times; TierRate = Growth Fee <RefBadge id="table-3a" label="see Table 3A" />
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3">Scenario</th>
+                    <th className="text-right px-4 py-3">Total Revenue</th>
+                    <th className="text-right px-4 py-3">Total Fees</th>
+                    <th className="text-right px-4 py-3">Client Keeps</th>
+                    <th className="text-right px-4 py-3">Avg/Mo Fee</th>
+                    <th className="text-right px-4 py-3">Eff. Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {scenarioComparisons.map((s) => (
+                    <tr key={s.label} className={s.growthPercent === growthPercent ? 'bg-blue-50' : ''}>
+                      <td className="px-4 py-3 font-medium">{s.label}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(s.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right text-blue-600">{formatCurrency(s.totalFees)}</td>
+                      <td className="px-4 py-3 text-right text-green-600">{formatCurrency(s.clientKeeps)}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(s.avgMonthlyFee)}</td>
+                      <td className="px-4 py-3 text-right">{s.effectiveRate.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Fee Component Cards */}
+          <div className="card p-6">
+            <h3 className="font-semibold mb-4">Fee Breakdown: {growthLabel}</h3>
+            <div className="grid grid-cols-3 gap-4 mb-6">
+              <div className="text-center p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="text-xs text-gray-500 uppercase">Foundation</p>
+                <p className="text-xl font-bold text-amber-600">
+                  {formatCurrency(y1Projection.summary.totalFoundationFees)}
+                </p>
+                <p className="text-xs text-gray-400">$0 Year 1 (Partnership Offer)</p>
               </div>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  value={customGrowth}
-                  onChange={(e) => setCustomGrowth(e.target.value)}
-                  placeholder="Custom %"
-                  className="px-3 py-2 border border-gray-300 rounded-lg text-sm w-32"
-                />
-                <button
-                  onClick={handleCustomGrowth}
-                  className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-300"
-                >
-                  Apply
-                </button>
+              <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="text-xs text-gray-500 uppercase">Sustaining</p>
+                <p className="text-xl font-bold text-purple-600">
+                  {formatCurrency(y1Projection.summary.totalSustainingFees)}
+                </p>
+                <p className="text-xs text-gray-400">$0 Year 1</p>
+              </div>
+              <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="text-xs text-gray-500 uppercase">Growth</p>
+                <p className="text-xl font-bold text-green-600">
+                  {formatCurrency(y1Projection.summary.totalGrowthFees)}
+                </p>
+                <p className="text-xs text-gray-400">Premium rates Y1</p>
               </div>
             </div>
           </div>
@@ -490,277 +497,312 @@ function MCRacingContent() {
             onClick={() => setShowProjections(!showProjections)}
             className="w-full card p-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
           >
-            <span className="font-semibold text-gray-700">5-Year Revenue Projections</span>
+            <span className="font-semibold text-gray-700">Revenue Projection Chart</span>
             {showProjections ? <ChevronUp className="h-5 w-5 text-gray-500" /> : <ChevronDown className="h-5 w-5 text-gray-500" />}
           </button>
 
           {showProjections && (
             <div className="card p-6">
-              <RevenueChart
-                monthlyData={fullProjection.months}
-                yearSummaries={fullProjection.yearSummaries}
-                baseline={baseline}
-              />
+              <RevenueChart data={chartData} showBaseline showFee />
             </div>
           )}
-        </div>
-      )}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 2: Financials */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'financials' && (
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card p-6 bg-green-50 border-green-200">
-              <div className="flex items-center gap-2 mb-2">
-                <ArrowUpCircle className="h-5 w-5 text-green-600" />
-                <span className="text-green-700 font-medium">Total Income</span>
-              </div>
-              <p className="text-3xl font-bold text-green-700">{formatCurrency(transactionSummary.totalIncome)}</p>
-            </div>
-            <div className="card p-6 bg-red-50 border-red-200">
-              <div className="flex items-center gap-2 mb-2">
-                <ArrowDownCircle className="h-5 w-5 text-red-600" />
-                <span className="text-red-700 font-medium">Total Expenses</span>
-              </div>
-              <p className="text-3xl font-bold text-red-700">{formatCurrency(transactionSummary.totalExpenses)}</p>
-            </div>
-            <div className="card p-6 bg-blue-50 border-blue-200">
-              <div className="flex items-center gap-2 mb-2">
-                <TrendingUp className="h-5 w-5 text-blue-600" />
-                <span className="text-blue-700 font-medium">Net Profit</span>
-              </div>
-              <p className={`text-3xl font-bold ${transactionSummary.net >= 0 ? 'text-blue-700' : 'text-red-700'}`}>
-                {formatCurrency(transactionSummary.net)}
-              </p>
-            </div>
-          </div>
-
-          {/* Add Transaction */}
+          {/* Table 5A: Invoice Breakdown */}
           <div className="card">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h3 className="font-semibold">Transactions</h3>
-              <button
-                onClick={() => setShowAddTransaction(!showAddTransaction)}
-                className="flex items-center gap-2 px-3 py-1.5 bg-blue-700 text-white rounded-lg text-sm font-medium hover:bg-blue-800"
-              >
-                <Plus className="h-4 w-4" />
-                Add Transaction
-              </button>
-            </div>
-
-            {showAddTransaction && (
-              <div className="p-4 bg-gray-50 border-b border-gray-200">
-                <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                  <select
-                    value={newTransaction.type}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, type: e.target.value as 'income' | 'expense', account: '' })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="income">Income</option>
-                    <option value="expense">Expense</option>
-                  </select>
-                  <select
-                    value={newTransaction.account}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, account: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  >
-                    <option value="">Select Account</option>
-                    {(newTransaction.type === 'income' ? INCOME_ACCOUNTS : EXPENSE_ACCOUNTS).map((acc) => (
-                      <option key={acc.value} value={acc.value}>{acc.label}</option>
-                    ))}
-                  </select>
-                  <input
-                    type="number"
-                    placeholder="Amount"
-                    value={newTransaction.amount || ''}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, amount: parseFloat(e.target.value) || 0 })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                  <input
-                    type="date"
-                    value={newTransaction.date}
-                    onChange={(e) => setNewTransaction({ ...newTransaction, date: e.target.value })}
-                    className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                  />
-                  <button
-                    onClick={handleAddTransaction}
-                    className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700"
-                  >
-                    Save
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Transaction List */}
-            <div className="divide-y divide-gray-100">
-              {transactions.length === 0 ? (
-                <div className="p-8 text-center text-gray-400">
-                  No transactions recorded yet. Add your first transaction above.
-                </div>
-              ) : (
-                transactions.map((t) => (
-                  <div key={t.id} className="p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {t.type === 'income' ? (
-                        <ArrowUpCircle className="h-5 w-5 text-green-500" />
-                      ) : (
-                        <ArrowDownCircle className="h-5 w-5 text-red-500" />
-                      )}
-                      <div>
-                        <p className="font-medium text-gray-900">
-                          {[...INCOME_ACCOUNTS, ...EXPENSE_ACCOUNTS].find(a => a.value === t.account)?.label || t.account}
-                        </p>
-                        <p className="text-sm text-gray-500">{t.date}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <span className={`font-semibold ${t.type === 'income' ? 'text-green-600' : 'text-red-600'}`}>
-                        {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                      </span>
-                      <button
-                        onClick={() => handleDeleteTransaction(t.id)}
-                        className="p-1 text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))
-              )}
+            <SectionHeader id="table-5a" label="Table 5A" title="Monthly Invoice Breakdown" />
+            <p className="px-4 py-2 text-xs text-gray-500 bg-blue-50 border-b border-blue-100">
+              What you pay us vs. what you keep &mdash; every month, transparent.
+            </p>
+            <div className="overflow-x-auto max-h-[400px]">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3">Month</th>
+                    <th className="text-right px-4 py-3">Revenue</th>
+                    <th className="text-right px-4 py-3">Baseline</th>
+                    <th className="text-right px-4 py-3">Uplift</th>
+                    <th className="text-right px-4 py-3 bg-blue-50">Total Due</th>
+                    <th className="text-right px-4 py-3 bg-green-50">You Keep</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {fullProjection.projections.slice(0, 24).map((row) => {
+                    const youKeep = row.projectedRevenue - row.totalMonthlyFee
+                    return (
+                      <tr key={row.monthLabel} className={row.isYearStart ? 'bg-blue-50 border-t-2 border-blue-300' : ''}>
+                        <td className="px-4 py-3">{row.monthLabel}</td>
+                        <td className="px-4 py-3 text-right">{formatCurrency(row.projectedRevenue)}</td>
+                        <td className="px-4 py-3 text-right text-gray-500">{formatCurrency(row.currentBaseline)}</td>
+                        <td className="px-4 py-3 text-right text-blue-600">{formatCurrency(row.uplift)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-blue-700">{formatCurrency(row.totalMonthlyFee)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-green-600">{formatCurrency(youKeep)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 3: Profitability */}
+      {/* TAB 2: Profitability */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'profitability' && (
         <div className="max-w-6xl mx-auto space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="card p-6">
-              <p className="text-gray-500 text-sm">Annual Revenue</p>
-              <p className="text-3xl font-bold text-gray-900 mt-1">{formatCurrency(annualRevenue)}</p>
-            </div>
-            <div className="card p-6">
-              <p className="text-gray-500 text-sm">Annual Expenses</p>
-              <p className="text-3xl font-bold text-red-600 mt-1">{formatCurrency(annualExpenses)}</p>
-            </div>
-            <div className="card p-6 bg-green-50">
-              <p className="text-green-700 text-sm">Projected Net Profit</p>
-              <p className={`text-3xl font-bold mt-1 ${projectedNetProfit >= 0 ? 'text-green-700' : 'text-red-700'}`}>
-                {formatCurrency(projectedNetProfit)}
-              </p>
-            </div>
-          </div>
-
-          <div className="card p-6">
-            <h3 className="font-semibold mb-4">Profit Margin Analysis</h3>
-            <div className="space-y-4">
-              <div>
-                <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-600">Gross Profit Margin</span>
-                  <span className="text-sm font-semibold">{formatPercent(projectedNetProfit / annualRevenue)}</span>
+          {/* How We Both Win — Year 1 */}
+          {fullProjection.yearSummaries.slice(0, 2).map((yr) => {
+            const isY1 = yr.yearNumber === 1
+            const baselineAnnual = yr.startBaseline * 12
+            const revenueGained = yr.totalRevenue - baselineAnnual
+            const feesPaid = yr.totalFees
+            const netGain = revenueGained - feesPaid
+            const roiMultiple = feesPaid > 0 ? (netGain / feesPaid).toFixed(1) : 'N/A'
+            const costPerDollar = revenueGained > 0 ? (feesPaid / revenueGained).toFixed(2) : 'N/A'
+            return (
+              <div key={yr.yearNumber} className="card p-6">
+                <h3 className="font-semibold text-blue-900 mb-1">
+                  How We Both Win (Year {yr.yearNumber})
+                  {isY1 && <span className="ml-2 text-xs bg-blue-200 text-blue-800 px-2 py-0.5 rounded-full">Partnership Offer</span>}
+                </h3>
+                <p className="text-xs text-gray-500 mb-4">
+                  Baseline: {formatCurrency(yr.startBaseline)}/mo &middot; {growthLabel}
+                </p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* What you pay us */}
+                  <div className="bg-blue-50 rounded-lg p-5 border border-blue-200">
+                    <h4 className="font-bold text-blue-800 mb-3">What You Pay Us</h4>
+                    <div className="space-y-2 text-sm">
+                      {!isY1 && yr.foundationFeeAnnual > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Foundation Fee</span>
+                          <span className="font-medium text-amber-600">{formatCurrency(yr.foundationFeeAnnual)}</span>
+                        </div>
+                      )}
+                      {!isY1 && yr.sustainingFeeTotal > 0 && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-600">Sustaining Fee</span>
+                          <span className="font-medium text-purple-600">{formatCurrency(yr.sustainingFeeTotal)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Growth Fees</span>
+                        <span className="font-medium text-green-600">{formatCurrency(yr.growthFeeTotal)}</span>
+                      </div>
+                      {isY1 && (
+                        <p className="text-xs text-blue-500 italic">Year 1 Partnership Offer: no Foundation or Sustaining fees</p>
+                      )}
+                      <hr className="border-blue-200" />
+                      <div className="flex justify-between font-bold text-blue-800">
+                        <span>Total Year {yr.yearNumber} Fees</span>
+                        <span>{formatCurrency(feesPaid)}</span>
+                      </div>
+                    </div>
+                  </div>
+                  {/* What you keep */}
+                  <div className="bg-green-50 rounded-lg p-5 border border-green-200">
+                    <h4 className="font-bold text-green-800 mb-3">What You Keep</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Total Revenue</span>
+                        <span className="font-medium">{formatCurrency(yr.totalRevenue)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">New Revenue Generated</span>
+                        <span className="font-medium text-green-700">{formatCurrency(revenueGained)}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-600">Less: Fees Paid</span>
+                        <span className="font-medium text-blue-600">({formatCurrency(feesPaid)})</span>
+                      </div>
+                      <hr className="border-green-200" />
+                      <div className="flex justify-between font-bold text-green-800">
+                        <span>Net New Income After Fees</span>
+                        <span>{formatCurrency(netGain)}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-2">
-                  <div
-                    className={`h-2 rounded-full ${projectedNetProfit >= 0 ? 'bg-green-500' : 'bg-red-500'}`}
-                    style={{ width: `${Math.max(0, Math.min(100, (projectedNetProfit / annualRevenue) * 100))}%` }}
-                  />
+                {/* ROI summary row */}
+                <div className="mt-4 grid grid-cols-3 gap-4">
+                  <div className="text-center p-3 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-xs text-gray-500">Avg Monthly Fee</p>
+                    <p className="text-lg font-bold text-blue-700">{formatCurrency(yr.avgMonthlyFee)}</p>
+                  </div>
+                  <div className="text-center p-3 bg-green-50 rounded-lg border border-green-200">
+                    <p className="text-xs text-gray-500">ROI Multiple</p>
+                    <p className="text-lg font-bold text-green-700">{roiMultiple}x</p>
+                  </div>
+                  <div className="text-center p-3 bg-purple-50 rounded-lg border border-purple-200">
+                    <p className="text-xs text-gray-500">Cost per $1 of Growth</p>
+                    <p className="text-lg font-bold text-purple-700">${costPerDollar}</p>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      )}
+            )
+          })}
 
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 4: Market Intel */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'market-intel' && (
-        <div className="max-w-6xl mx-auto space-y-6">
-          {/* Marketing Funnel */}
+          {/* Table 4A: Year-by-Year P&L */}
           <div className="card">
-            <SectionHeader id="sec-funnel" label="A" title="Marketing Funnel" />
-            <div className="p-6">
-              <div className="grid grid-cols-5 gap-4 text-center">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-bold text-gray-900">{MOCK_FUNNEL.impressions.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">Impressions</p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-bold text-gray-900">{MOCK_FUNNEL.clicks.toLocaleString()}</p>
-                  <p className="text-sm text-gray-500">Clicks</p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-bold text-gray-900">{MOCK_FUNNEL.leads}</p>
-                  <p className="text-sm text-gray-500">Leads</p>
-                </div>
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <p className="text-2xl font-bold text-gray-900">{MOCK_FUNNEL.deals}</p>
-                  <p className="text-sm text-gray-500">Customers</p>
-                </div>
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-700">{formatCurrency(MOCK_FUNNEL.revenue)}</p>
-                  <p className="text-sm text-blue-600">Revenue</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ad Channel Performance */}
-          <div className="card">
-            <SectionHeader id="sec-channels" label="B" title="Ad Channel Performance" />
-            <div className="p-6">
+            <SectionHeader id="table-4a" label="Table 4A" title={`Year-by-Year P&L (${growthLabel})`} />
+            <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-200">
-                    <th className="text-left py-2 font-medium text-gray-600">Channel</th>
-                    <th className="text-right py-2 font-medium text-gray-600">Spend</th>
-                    <th className="text-right py-2 font-medium text-gray-600">Leads</th>
-                    <th className="text-right py-2 font-medium text-gray-600">CPL</th>
-                    <th className="text-right py-2 font-medium text-gray-600">ROAS</th>
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3">Year</th>
+                    <th className="text-right px-4 py-3">Baseline</th>
+                    <th className="text-right px-4 py-3">Total Revenue</th>
+                    <th className="text-right px-4 py-3">Total Fees</th>
+                    <th className="text-right px-4 py-3 text-green-700">Net to Client</th>
+                    <th className="text-right px-4 py-3">Avg/Mo Fee</th>
                   </tr>
                 </thead>
-                <tbody>
-                  {MOCK_AD_CHANNELS.map((ch) => (
-                    <tr key={ch.channel} className="border-b border-gray-100">
-                      <td className="py-3 font-medium">{ch.channel}</td>
-                      <td className="py-3 text-right">{formatCurrency(ch.spend)}</td>
-                      <td className="py-3 text-right">{ch.leads}</td>
-                      <td className="py-3 text-right">{formatCurrency(ch.cpl)}</td>
-                      <td className="py-3 text-right font-semibold text-green-600">{ch.roas}x</td>
+                <tbody className="divide-y divide-gray-100">
+                  {fullProjection.yearSummaries.map((year) => (
+                    <tr key={year.yearNumber}>
+                      <td className="px-4 py-3 font-medium">Year {year.yearNumber}</td>
+                      <td className="px-4 py-3 text-right text-gray-500">{formatCurrency(year.startBaseline)}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(year.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-blue-700">{formatCurrency(year.totalFees)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-600">{formatCurrency(year.totalRevenue - year.totalFees)}</td>
+                      <td className="px-4 py-3 text-right text-blue-600">{formatCurrency(year.avgMonthlyFee)}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
           </div>
+        </div>
+      )}
 
-          {/* Overall Marketing ROAS */}
-          <div className="card p-6">
-            <h3 className="font-semibold mb-4">Marketing ROI Summary</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Total Ad Spend</p>
-                <p className="text-xl font-bold text-gray-900">{formatCurrency(totalAdSpend)}</p>
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 3: Market Intel */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'market-intel' && (
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Chart 6A: Marketing Funnel */}
+          <div className="card">
+            <SectionHeader id="chart-6a" label="Chart 6A" title="Marketing Funnel" />
+            <div className="p-6">
+              <div className="flex flex-col items-center gap-1">
+                {[
+                  { label: 'Impressions', value: MOCK_FUNNEL.impressions, color: 'bg-blue-100 text-blue-800', width: 'w-full' },
+                  { label: 'Clicks', value: MOCK_FUNNEL.clicks, color: 'bg-blue-200 text-blue-900', width: 'w-5/6' },
+                  { label: 'Leads', value: MOCK_FUNNEL.leads, color: 'bg-blue-400 text-white', width: 'w-3/5' },
+                  { label: 'Closed Deals', value: MOCK_FUNNEL.deals, color: 'bg-blue-600 text-white', width: 'w-2/5' },
+                  { label: 'Revenue', value: MOCK_FUNNEL.revenue, color: 'bg-blue-800 text-white', width: 'w-1/4' },
+                ].map((step) => (
+                  <div key={step.label} className={`${step.width} ${step.color} rounded-lg p-3 text-center transition-all`}>
+                    <p className="text-xs font-medium opacity-80">{step.label}</p>
+                    <p className="text-lg font-bold">
+                      {step.label === 'Revenue' ? formatCurrency(step.value) : step.value.toLocaleString()}
+                    </p>
+                  </div>
+                ))}
               </div>
-              <div className="text-center p-3 bg-green-50 rounded-lg shadow-sm">
+              <div className="mt-4 text-center text-xs text-gray-500">
+                Conversion: {((MOCK_FUNNEL.clicks / MOCK_FUNNEL.impressions) * 100).toFixed(1)}% CTR &rarr;
+                {((MOCK_FUNNEL.leads / MOCK_FUNNEL.clicks) * 100).toFixed(1)}% Lead Rate &rarr;
+                {((MOCK_FUNNEL.deals / MOCK_FUNNEL.leads) * 100).toFixed(0)}% Close Rate
+              </div>
+            </div>
+          </div>
+
+          {/* Table 6B: Ad Performance */}
+          <div className="card">
+            <SectionHeader id="table-6b" label="Table 6B" title="Ad Performance by Channel" />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="text-left px-4 py-3">Channel</th>
+                    <th className="text-right px-4 py-3">Spend</th>
+                    <th className="text-right px-4 py-3">Impressions</th>
+                    <th className="text-right px-4 py-3">Clicks</th>
+                    <th className="text-right px-4 py-3">Leads</th>
+                    <th className="text-right px-4 py-3">CPL</th>
+                    <th className="text-right px-4 py-3">ROAS</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {MOCK_AD_CHANNELS.map((ch) => (
+                    <tr key={ch.channel}>
+                      <td className="px-4 py-3 font-medium">{ch.channel}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(ch.spend)}</td>
+                      <td className="px-4 py-3 text-right">{ch.impressions.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">{ch.clicks.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right">{ch.leads}</td>
+                      <td className="px-4 py-3 text-right">{formatCurrency(ch.cpl)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-green-600">{ch.roas}x</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot className="bg-gray-50 font-semibold border-t">
+                  <tr>
+                    <td className="px-4 py-3">Total</td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(totalAdSpend)}</td>
+                    <td className="px-4 py-3 text-right">{MOCK_AD_CHANNELS.reduce((s, c) => s + c.impressions, 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">{MOCK_AD_CHANNELS.reduce((s, c) => s + c.clicks, 0).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">{MOCK_AD_CHANNELS.reduce((s, c) => s + c.leads, 0)}</td>
+                    <td className="px-4 py-3 text-right">{formatCurrency(Math.round(totalAdSpend / MOCK_AD_CHANNELS.reduce((s, c) => s + c.leads, 0)))}</td>
+                    <td className="px-4 py-3 text-right text-green-600">{marketingROAS}x</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </div>
+
+          {/* Table 6C: Social & SEO */}
+          <div className="card">
+            <SectionHeader id="table-6c" label="Table 6C" title="Social, SEO & Reviews" />
+            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="bg-blue-50 rounded-lg p-4 border border-blue-100">
+                <h4 className="font-semibold text-blue-900 text-sm mb-3">Social Media</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-600">Followers</span><span className="font-medium">{MOCK_SOCIAL_SEO.social.followers.toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Engagement Rate</span><span className="font-medium">{MOCK_SOCIAL_SEO.social.engagementRate}%</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Posts/Month</span><span className="font-medium">{MOCK_SOCIAL_SEO.social.postsPerMonth}</span></div>
+                </div>
+              </div>
+              <div className="bg-purple-50 rounded-lg p-4 border border-purple-100">
+                <h4 className="font-semibold text-purple-900 text-sm mb-3">SEO</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-600">Domain Authority</span><span className="font-medium">{MOCK_SOCIAL_SEO.seo.domainAuthority}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Keywords Ranked</span><span className="font-medium">{MOCK_SOCIAL_SEO.seo.keywordsRanked}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Organic Traffic</span><span className="font-medium">{MOCK_SOCIAL_SEO.seo.organicTraffic.toLocaleString()}/mo</span></div>
+                </div>
+              </div>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-100">
+                <h4 className="font-semibold text-green-900 text-sm mb-3">Reviews</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-600">Google Rating</span><span className="font-medium">{MOCK_SOCIAL_SEO.reviews.googleRating} / 5.0</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Review Count</span><span className="font-medium">{MOCK_SOCIAL_SEO.reviews.reviewCount}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-600">Response Rate</span><span className="font-medium">{MOCK_SOCIAL_SEO.reviews.responseRate}%</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Marketing ROI Summary */}
+          <div className="card p-6 bg-gradient-to-r from-blue-50 to-green-50 border-blue-200">
+            <h3 className="font-semibold text-blue-900 mb-4">Marketing &rarr; Revenue Connection</h3>
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <p className="text-xs text-gray-500">Total Ad Spend/mo</p>
+                <p className="text-xl font-bold text-blue-700">{formatCurrency(totalAdSpend)}</p>
+              </div>
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
+                <p className="text-xs text-gray-500">Revenue Generated</p>
+                <p className="text-xl font-bold text-green-700">{formatCurrency(MOCK_FUNNEL.revenue)}</p>
+              </div>
+              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
                 <p className="text-xs text-gray-500">Marketing ROAS</p>
-                <p className="text-xl font-bold text-green-600">{marketingROAS}x</p>
-              </div>
-              <div className="text-center p-3 bg-white rounded-lg shadow-sm">
-                <p className="text-xs text-gray-500">Avg Monthly Fee</p>
-                <p className="text-xl font-bold text-blue-600">{formatCurrency(fullProjection.yearSummaries.length > 0 ? fullProjection.yearSummaries[0].avgMonthlyFee : 0)}</p>
+                <p className="text-xl font-bold text-blue-600">{marketingROAS}x</p>
               </div>
             </div>
             <div className="bg-white rounded-lg p-3 text-sm">
-              <p className="font-mono text-xs text-gray-600">ROAS = (Revenue - Baseline) / Ad Spend = ({formatCurrency(MOCK_FUNNEL.revenue)} - {formatCurrency(baseline)}) / {formatCurrency(totalAdSpend)} = {marketingROAS}x</p>
-              <p className="mt-2 text-gray-600 font-medium">
+              <p className="text-gray-600 font-medium">
                 For every $1 spent on marketing, MC Racing earned ${marketingROAS} in new revenue above baseline.
               </p>
             </div>
@@ -769,7 +811,7 @@ function MCRacingContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 5: Analytics */}
+      {/* TAB 4: Analytics */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'analytics' && (
         <div className="max-w-6xl mx-auto space-y-6">
@@ -797,7 +839,7 @@ function MCRacingContent() {
             <div className="card p-6 bg-blue-50 border-blue-200">
               <h3 className="font-semibold text-blue-900 mb-4">Connect Real Data Sources</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
+                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 text-left opacity-75 cursor-not-allowed">
                   <div className="w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center text-purple-600 font-bold text-xs">M</div>
                   <div>
                     <p className="font-semibold text-blue-900">Connect Metricool</p>
@@ -805,11 +847,11 @@ function MCRacingContent() {
                     <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
                   </div>
                 </button>
-                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 hover:border-blue-500 transition-colors text-left opacity-75 cursor-not-allowed">
-                  <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center text-red-600 font-bold text-xs">G</div>
+                <button className="flex items-center gap-3 p-4 bg-white rounded-lg border-2 border-dashed border-blue-300 text-left opacity-75 cursor-not-allowed">
+                  <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600 font-bold text-xs">Mo</div>
                   <div>
-                    <p className="font-semibold text-blue-900">Connect Google Analytics</p>
-                    <p className="text-xs text-gray-500">Website traffic & conversion data</p>
+                    <p className="font-semibold text-blue-900">Connect Monday.com</p>
+                    <p className="text-xs text-gray-500">Project management & lead tracking</p>
                     <span className="text-[10px] text-blue-500 font-medium">COMING SOON</span>
                   </div>
                 </button>
@@ -817,118 +859,64 @@ function MCRacingContent() {
             </div>
           )}
 
-          {analyticsMode === 'demo' && (
-            <div className="space-y-6">
-              {/* Social Media */}
-              <div className="card">
-                <SectionHeader id="sec-social" label="A" title="Social Media Performance" />
-                <div className="p-6 grid grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.social.followers.toLocaleString()}</p>
-                    <p className="text-sm text-gray-500">Total Followers</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.social.engagementRate}%</p>
-                    <p className="text-sm text-gray-500">Engagement Rate</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.social.postsPerMonth}</p>
-                    <p className="text-sm text-gray-500">Posts/Month</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* SEO */}
-              <div className="card">
-                <SectionHeader id="sec-seo" label="B" title="SEO Performance" />
-                <div className="p-6 grid grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.seo.domainAuthority}</p>
-                    <p className="text-sm text-gray-500">Domain Authority</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.seo.keywordsRanked}</p>
-                    <p className="text-sm text-gray-500">Keywords Ranked</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.seo.organicTraffic}</p>
-                    <p className="text-sm text-gray-500">Organic Traffic/mo</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Reviews */}
-              <div className="card">
-                <SectionHeader id="sec-reviews" label="C" title="Online Reviews" />
-                <div className="p-6 grid grid-cols-3 gap-4">
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-yellow-500">{MOCK_SOCIAL_SEO.reviews.googleRating}</p>
-                    <p className="text-sm text-gray-500">Google Rating</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-gray-900">{MOCK_SOCIAL_SEO.reviews.reviewCount}</p>
-                    <p className="text-sm text-gray-500">Total Reviews</p>
-                  </div>
-                  <div className="text-center p-4 bg-gray-50 rounded-lg">
-                    <p className="text-2xl font-bold text-green-600">{MOCK_SOCIAL_SEO.reviews.responseRate}%</p>
-                    <p className="text-sm text-gray-500">Response Rate</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 6: How It Works */}
-      {/* ═══════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'how-it-works' && (
-        <div className="max-w-6xl mx-auto space-y-6">
+          {/* Chart 2B: Seasonal Factors */}
           <div className="card p-6">
-            <h2 className="text-xl font-bold mb-4">How Our Partnership Works</h2>
-            <div className="space-y-6">
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">1</div>
-                <div>
-                  <h3 className="font-semibold">Baseline Establishment</h3>
-                  <p className="text-gray-600 mt-1">We establish your current monthly revenue baseline of {formatCurrency(baseline)}. This represents your business before our marketing efforts.</p>
+            <SectionHeader id="chart-2b" label="Chart 2B" title="Seasonal Factors: Sim Racing Industry" />
+            <div className="grid grid-cols-12 gap-1 items-end h-48 mt-4">
+              {seasonalFactors.map((factor, i) => (
+                <div key={i} className="flex flex-col items-center">
+                  <div
+                    className={`w-full rounded-t ${factor >= 1.0 ? 'bg-blue-500' : 'bg-gray-300'}`}
+                    style={{ height: `${(factor / 1.5) * 100}%` }}
+                  />
+                  <p className="text-xs mt-1 text-gray-500">{MONTH_NAMES[i]}</p>
+                  <p className="text-xs font-medium">{factor.toFixed(2)}</p>
                 </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">2</div>
-                <div>
-                  <h3 className="font-semibold">Foundation Fee</h3>
-                  <p className="text-gray-600 mt-1">A monthly foundation fee of {formatCurrency(tierRates.foundationFee)} ({formatPercent(tierRates.foundationFeePercent)}) covers our core services and operational costs.</p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">3</div>
-                <div>
-                  <h3 className="font-semibold">Growth Fee</h3>
-                  <p className="text-gray-600 mt-1">For revenue generated above your baseline, we take a {formatPercent(tierRates.growthFeePercent)} growth fee. This aligns our incentives with your success.</p>
-                </div>
-              </div>
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-bold">4</div>
-                <div>
-                  <h3 className="font-semibold">Transparent Reporting</h3>
-                  <p className="text-gray-600 mt-1">This dashboard provides full visibility into your marketing performance, revenue growth, and fee calculations.</p>
-                </div>
-              </div>
+              ))}
+            </div>
+            <p className="text-sm text-gray-500 mt-4">
+              Sim Racing peaks in winter (Jan: 1.20) as an indoor activity, dips in summer (May: 0.85). Opposite pattern to outdoor entertainment.
+            </p>
+          </div>
+
+          {/* Table 3A: Tier Rates */}
+          <div className="card">
+            <SectionHeader id="table-3a" label="Table 3A" title="Growth Fee Tier Rates (Micro Category)" />
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-blue-50">
+                  <tr>
+                    <th className="text-left px-4 py-3">Tier</th>
+                    <th className="text-left px-4 py-3">Growth Range</th>
+                    <th className="text-center px-4 py-3">Year 1 (Premium)</th>
+                    <th className="text-center px-4 py-3">Year 2+ (Standard)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {y1CategoryInfo.tiers.map((tier, i) => {
+                    const y2Tier = categoryInfo.tiers[i]
+                    return (
+                      <tr key={tier.tierNumber} className={i % 2 === 0 ? '' : 'bg-gray-50'}>
+                        <td className="px-4 py-3 font-medium">Tier {tier.tierNumber}</td>
+                        <td className="px-4 py-3">{tier.label}</td>
+                        <td className="px-4 py-3 text-center text-blue-600 font-semibold">{formatPercent(tier.feeRate)}</td>
+                        <td className="px-4 py-3 text-center text-gray-600">{formatPercent(y2Tier.feeRate)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
           </div>
 
-          {/* Retention Brackets */}
-          <div className="card p-6">
-            <h3 className="font-semibold mb-4">Retention Rate Structure</h3>
-            <p className="text-gray-600 mb-4">As our partnership matures, your retention rate increases, meaning you keep more of the growth revenue:</p>
-            <div className="grid grid-cols-4 gap-2">
-              {RETENTION_BRACKETS.map((bracket, idx) => (
-                <div key={idx} className="text-center p-3 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-500">Year {idx + 1}</p>
-                  <p className="font-bold text-blue-700">{formatPercent(bracket.clientRetention)}</p>
-                  <p className="text-xs text-gray-400">You Keep</p>
+          {/* Table 3B: Retention Brackets */}
+          <div className="card">
+            <SectionHeader id="table-3b" label="Table 3B" title="Baseline Retention Brackets" />
+            <div className="p-4 space-y-2">
+              {RETENTION_BRACKETS.map((b) => (
+                <div key={b.label} className="flex justify-between text-sm p-2 bg-blue-50 rounded border border-blue-100">
+                  <span className="text-gray-700">{b.label} growth</span>
+                  <span className="font-medium text-blue-700">{(b.retentionRate * 100).toFixed(0)}% retained into new baseline</span>
                 </div>
               ))}
             </div>
@@ -937,7 +925,135 @@ function MCRacingContent() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════ */}
-      {/* TAB 7: Offer Refiner (Locked) */}
+      {/* TAB 5: How It Works */}
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'how-it-works' && (
+        <div className="max-w-6xl mx-auto space-y-6">
+          <div className="card p-6">
+            <h2 className="text-xl font-bold mb-6">How The Partnership Model Works for MC Racing</h2>
+
+            <div className="space-y-8">
+              {/* Step 1 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">1</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Establish the Baseline</h3>
+                  <p className="text-gray-600 mt-1">
+                    MC Racing&apos;s current monthly revenue is <strong>{formatCurrency(baseline)}/month</strong>.
+                    This is the starting point &mdash; fees are only charged on revenue <em>above</em> this amount.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 2 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">2</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Year 1: Partnership Offer (Zero Risk)</h3>
+                  <p className="text-gray-600 mt-1">
+                    In Year 1, there&apos;s <strong>no Foundation Fee</strong> and <strong>no Sustaining Fee</strong>.
+                    MC Racing only pays when they grow. If marketing doesn&apos;t work, they pay nothing.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 3 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">3</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Tiered Growth Fees</h3>
+                  <p className="text-gray-600 mt-1">
+                    Growth fees are calculated in tiers based on how much you grow. Higher growth = more fees, but you keep the majority of every dollar.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 4 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-blue-700 text-white flex items-center justify-center font-bold text-sm">4</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Seasonal Adjustments</h3>
+                  <p className="text-gray-600 mt-1">
+                    Sim Racing is an indoor activity &mdash; it peaks in <strong>winter</strong> and dips in <strong>summer</strong>.
+                    Revenue projections adjust for this natural cycle.
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 5 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-600 text-white flex items-center justify-center font-bold text-sm">5</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Year 1 Summary</h3>
+                  {fullProjection.yearSummaries.length > 0 && (() => {
+                    const yr1 = fullProjection.yearSummaries[0]
+                    return (
+                      <div className="mt-2 grid grid-cols-3 gap-3">
+                        <div className="p-3 bg-blue-50 rounded-lg text-center">
+                          <p className="text-xs text-gray-500">Year 1 Revenue</p>
+                          <p className="font-bold text-blue-700">{formatCurrency(yr1.totalRevenue)}</p>
+                        </div>
+                        <div className="p-3 bg-purple-50 rounded-lg text-center">
+                          <p className="text-xs text-gray-500">Year 1 Fees</p>
+                          <p className="font-bold text-purple-600">{formatCurrency(yr1.totalFees)}</p>
+                        </div>
+                        <div className="p-3 bg-green-50 rounded-lg text-center">
+                          <p className="text-xs text-gray-500">You Keep</p>
+                          <p className="font-bold text-green-600">{formatCurrency(yr1.totalRevenue - yr1.totalFees)}</p>
+                        </div>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+
+              {/* Step 6 */}
+              <div className="flex gap-4">
+                <div className="flex-shrink-0 w-8 h-8 rounded-full bg-purple-600 text-white flex items-center justify-center font-bold text-sm">6</div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">Year 2+: Three-Part Fee Model</h3>
+                  <p className="text-gray-600 mt-1">
+                    From Year 2, all three components apply: Foundation Fee, Sustaining Fee, and Growth Fees (at lower standard rates).
+                    The baseline also resets upward based on your growth.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Key Formula Card */}
+          <div className="card p-6">
+            <h3 className="text-lg font-semibold mb-4">The Three-Part Fee Model</h3>
+            <div className="bg-blue-50 rounded-lg p-4 font-mono text-sm mb-4 border border-blue-200">
+              <p className="text-gray-600 mb-2">Total Monthly Fee =</p>
+              <p className="ml-4">
+                <span className="text-amber-600 font-semibold">Foundation Fee</span>
+                {' + '}
+                <span className="text-purple-600 font-semibold">Sustaining Fee</span>
+                {' + '}
+                <span className="text-green-600 font-semibold">Growth Fee</span>
+              </p>
+            </div>
+            <div className="grid md:grid-cols-3 gap-4 text-sm">
+              <div className="p-3 bg-amber-50 rounded-lg border border-amber-200">
+                <p className="font-semibold text-amber-800">Foundation Fee</p>
+                <p className="text-amber-700">Annual minimum based on business size. <strong>$0 in Year 1</strong>.</p>
+              </div>
+              <div className="p-3 bg-purple-50 rounded-lg border border-purple-200">
+                <p className="font-semibold text-purple-800">Sustaining Fee</p>
+                <p className="text-purple-700">Year 2+ income protection. <strong>$0 in Year 1</strong>.</p>
+              </div>
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <p className="font-semibold text-green-800">Growth Fee</p>
+                <p className="text-green-700">Performance fees on uplift. Only pay when you grow.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════ */}
+      {/* TAB 6: Offer Refiner (Locked) */}
       {/* ═══════════════════════════════════════════════════════════════════ */}
       {activeTab === 'offer-refiner' && (
         <div className="max-w-6xl mx-auto space-y-6">
