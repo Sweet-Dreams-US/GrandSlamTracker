@@ -2,14 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { Download, Calendar, DollarSign, CheckCircle, Clock, Banknote } from 'lucide-react'
+import { Calendar, DollarSign, CheckCircle, Clock, Banknote } from 'lucide-react'
 import SummaryCard from '@/components/dashboard/SummaryCard'
-import { calculatePayout } from '@/lib/calculations/payoutCalculator'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import type { PayoutRecord } from '@/lib/supabase/types'
 import { DEAL_TYPES, type DealType } from '@/lib/constants/dealTypes'
-
-type Period = 'month' | 'quarter' | 'year'
 
 function fmt(n: number): string {
   return new Intl.NumberFormat('en-US', {
@@ -20,7 +17,6 @@ function fmt(n: number): string {
 }
 
 export default function FinancialsPage() {
-  const [period, setPeriod] = useState<Period>('month')
   const [recentPayouts, setRecentPayouts] = useState<PayoutRecord[]>([])
   const [loading, setLoading] = useState(true)
 
