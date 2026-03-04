@@ -1,14 +1,38 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
-import { Lock, Shield, FileSignature, DollarSign, Calculator, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useEffect, useMemo, useRef } from 'react'
+import { Lock, Shield, FileSignature, DollarSign, Calculator, AlertCircle, ChevronDown, ChevronUp, Printer, CheckSquare, Square } from 'lucide-react'
 import { calculateMonthlyFee, getTierRatesForBaseline } from '@/lib/calculations/feeCalculator'
 import { getRevenueEntries, getMonthlyExpenses } from '@/lib/services/mcRacingService'
 import type { RevenueEntry, MonthlyExpense } from '@/lib/supabase/types'
 
 const STORAGE_KEY = 'mcracing-contract-finalized'
+const CHECKS_KEY = 'mcracing-contract-checks'
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 const FULL_MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+// All contract sections that need sign-off
+const CONTRACT_SECTIONS = [
+  { id: 'header', label: 'Contract Header' },
+  { id: 's1', label: '§1 Definitions' },
+  { id: 's2', label: '§2 Partnership Overview' },
+  { id: 's3', label: '§3 Baseline Revenue Determination' },
+  { id: 's4', label: '§4 Fee Structure' },
+  { id: 's5', label: '§5 Revenue Reporting & Payment' },
+  { id: 's6', label: '§6 Scope of Services' },
+  { id: 's7', label: '§7 Client Obligations' },
+  { id: 's8', label: '§8 Provider Obligations' },
+  { id: 's9', label: '§9 Intellectual Property' },
+  { id: 's10', label: '§10 Termination' },
+  { id: 's11', label: '§11 Exit & Buyout' },
+  { id: 's12', label: '§12 Renewal' },
+  { id: 's13', label: '§13 Confidentiality' },
+  { id: 's14', label: '§14 Limitation of Liability' },
+  { id: 's15', label: '§15 Dispute Resolution' },
+  { id: 's16', label: '§16 General Provisions' },
+  { id: 's17', label: '§17 Growth Targets & Milestones' },
+  { id: 's18', label: '§18 Signatures' },
+]
 
 // ─── Contract Terms Interface ───────────────────────────────────────────────
 
@@ -43,6 +67,10 @@ interface MonthLedgerRow {
   totalFee: number; netToClient: number; sweetDreamsEarns: number
 }
 
+interface SectionChecks {
+  [sectionId: string]: { provider: boolean; client: boolean }
+}
+
 // ─── Main Component ─────────────────────────────────────────────────────────
 
 export default function ContractTab() {
@@ -51,11 +79,16 @@ export default function ContractTab() {
   const [terms, setTerms] = useState(DEFAULT_TERMS)
   const [ledgerRows, setLedgerRows] = useState<MonthLedgerRow[]>([])
   const [ledgerLoading, setLedgerLoading] = useState(false)
+  const [checks, setChecks] = useState<SectionChecks>({})
 
   useEffect(() => {
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored) {
       try { setFinalized(JSON.parse(stored)) } catch { /* ignore */ }
+    }
+    const storedChecks = localStorage.getItem(CHECKS_KEY)
+    if (storedChecks) {
+      try { setChecks(JSON.parse(storedChecks)) } catch { /* ignore */ }
     }
   }, [])
 
@@ -63,6 +96,13 @@ export default function ContractTab() {
     if (!finalized) return
     loadLedger(finalized)
   }, [finalized])
+
+  // Persist checks
+  useEffect(() => {
+    if (Object.keys(checks).length > 0) {
+      localStorage.setItem(CHECKS_KEY, JSON.stringify(checks))
+    }
+  }, [checks])
 
   async function loadLedger(t: ContractTerms) {
     setLedgerLoading(true)
@@ -106,31 +146,71 @@ export default function ContractTab() {
 
   const handleUnlock = () => { localStorage.removeItem(STORAGE_KEY); setFinalized(null) }
 
+  const toggleCheck = (sectionId: string, party: 'provider' | 'client') => {
+    setChecks(prev => ({
+      ...prev,
+      [sectionId]: {
+        provider: prev[sectionId]?.provider || false,
+        client: prev[sectionId]?.client || false,
+        [party]: !(prev[sectionId]?.[party] || false),
+      }
+    }))
+  }
+
+  const allChecked = CONTRACT_SECTIONS.every(s => checks[s.id]?.provider && checks[s.id]?.client)
+  const checkedCount = CONTRACT_SECTIONS.filter(s => checks[s.id]?.provider && checks[s.id]?.client).length
+  const totalSections = CONTRACT_SECTIONS.length
+
   if (finalized) {
     return <PostFinalizationView terms={finalized} rows={ledgerRows} loading={ledgerLoading} onUnlock={handleUnlock} />
   }
 
-  return <PreFinalizationView terms={terms} setTerms={setTerms} showConfirm={showConfirm} setShowConfirm={setShowConfirm} onFinalize={handleFinalize} />
+  return <PreFinalizationView terms={terms} setTerms={setTerms} showConfirm={showConfirm} setShowConfirm={setShowConfirm} onFinalize={handleFinalize} checks={checks} toggleCheck={toggleCheck} allChecked={allChecked} checkedCount={checkedCount} totalSections={totalSections} />
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
 const fmt = (n: number) => n < 0 ? `-$${Math.abs(n).toLocaleString()}` : `$${n.toLocaleString()}`
 
-function Section({ id, title, expanded, onToggle, children, badge }: {
-  id: string; title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode; badge?: string
-}) {
+function CheckboxPair({ sectionId, checks, toggleCheck }: { sectionId: string; checks: SectionChecks; toggleCheck: (id: string, party: 'provider' | 'client') => void }) {
+  const providerChecked = checks[sectionId]?.provider || false
+  const clientChecked = checks[sectionId]?.client || false
   return (
-    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <button onClick={onToggle} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors">
+    <div className="flex items-center gap-4 mt-4 pt-3 border-t border-gray-100">
+      <button onClick={() => toggleCheck(sectionId, 'provider')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${providerChecked ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+        {providerChecked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+        Provider (Cole)
+      </button>
+      <button onClick={() => toggleCheck(sectionId, 'client')} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${clientChecked ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}>
+        {clientChecked ? <CheckSquare className="h-3.5 w-3.5" /> : <Square className="h-3.5 w-3.5" />}
+        Client (Mark)
+      </button>
+      {providerChecked && clientChecked && <span className="text-xs text-green-600 font-medium">✓ Both agreed</span>}
+    </div>
+  )
+}
+
+function Section({ id, title, expanded, onToggle, children, badge, checks, toggleCheck }: {
+  id: string; title: string; expanded: boolean; onToggle: () => void; children: React.ReactNode; badge?: string; checks: SectionChecks; toggleCheck: (id: string, party: 'provider' | 'client') => void
+}) {
+  const bothChecked = checks[id]?.provider && checks[id]?.client
+  return (
+    <div className={`bg-white rounded-xl border overflow-hidden print:break-inside-avoid ${bothChecked ? 'border-green-200' : 'border-gray-200'}`}>
+      <button onClick={onToggle} className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-gray-50 transition-colors print:hover:bg-white">
         <div className="flex items-center gap-2">
           <span className="text-xs font-mono text-gray-400">{id}</span>
           <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
           {badge && <span className="text-xs bg-mcracing-100 text-mcracing-700 px-2 py-0.5 rounded-full font-medium">{badge}</span>}
+          {bothChecked && <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Agreed</span>}
         </div>
-        {expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}
+        <span className="print:hidden">{expanded ? <ChevronUp className="h-4 w-4 text-gray-400" /> : <ChevronDown className="h-4 w-4 text-gray-400" />}</span>
       </button>
-      {expanded && <div className="px-5 pb-5 border-t border-gray-100 pt-4">{children}</div>}
+      {expanded && (
+        <div className="px-5 pb-5 border-t border-gray-100 pt-4">
+          {children}
+          <CheckboxPair sectionId={id} checks={checks} toggleCheck={toggleCheck} />
+        </div>
+      )}
     </div>
   )
 }
@@ -146,17 +226,21 @@ function P({ children }: { children: React.ReactNode }) {
 // ─── PRE-FINALIZATION ───────────────────────────────────────────────────────
 
 function PreFinalizationView({
-  terms, setTerms, showConfirm, setShowConfirm, onFinalize,
+  terms, setTerms, showConfirm, setShowConfirm, onFinalize, checks, toggleCheck, allChecked, checkedCount, totalSections,
 }: {
   terms: Omit<ContractTerms, 'finalizedDate'>
   setTerms: (t: Omit<ContractTerms, 'finalizedDate'>) => void
   showConfirm: boolean; setShowConfirm: (v: boolean) => void; onFinalize: () => void
+  checks: SectionChecks; toggleCheck: (id: string, party: 'provider' | 'client') => void
+  allChecked: boolean; checkedCount: number; totalSections: number
 }) {
   const [expanded, setExpanded] = useState<string | null>('header')
   const toggle = (id: string) => setExpanded(prev => prev === id ? null : id)
   const update = (patch: Partial<typeof terms>) => setTerms({ ...terms, ...patch })
+  const printRef = useRef<HTMLDivElement>(null)
 
-  const tierRates = useMemo(() => getTierRatesForBaseline(terms.monthlyBaseline, true), [terms.monthlyBaseline])
+  // Use standard (Year 2) rates — matches the scenario generator
+  const tierRates = useMemo(() => getTierRatesForBaseline(terms.monthlyBaseline, false), [terms.monthlyBaseline])
   const annualBaseline = terms.monthlyBaseline * 12
 
   const feePreview = useMemo(() => {
@@ -179,22 +263,47 @@ function PreFinalizationView({
     ]
   }, [terms.minimumMonthlyFee])
 
-  const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-mcracing-500 focus:border-mcracing-500"
+  const handlePrint = () => {
+    // Expand all sections for print
+    const prevExpanded = expanded
+    setExpanded(null)
+    setTimeout(() => {
+      window.print()
+      setExpanded(prevExpanded)
+    }, 100)
+  }
+
+  const inputClass = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-mcracing-500 focus:border-mcracing-500 print:border-gray-400"
   const selectClass = inputClass
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" ref={printRef}>
       {/* Banner */}
       <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
         <FileSignature className="h-5 w-5 text-amber-700 shrink-0" />
-        <div>
+        <div className="flex-1">
           <h3 className="text-sm font-semibold text-amber-900">GRAND SLAM Growth Partnership Agreement — Draft for Review</h3>
-          <p className="text-xs text-amber-600">This document is a working draft. Both parties will review, negotiate, and finalize all terms before execution.</p>
+          <p className="text-xs text-amber-600">Both parties review each section and check off agreement. All sections must be approved before finalizing.</p>
+        </div>
+        <button onClick={handlePrint} className="flex items-center gap-1.5 px-3 py-2 bg-white border border-amber-300 rounded-lg text-xs font-medium text-amber-700 hover:bg-amber-50 transition-colors print:hidden">
+          <Printer className="h-3.5 w-3.5" />
+          Print
+        </button>
+      </div>
+
+      {/* Progress bar */}
+      <div className="bg-white rounded-xl border border-gray-200 p-4 print:hidden">
+        <div className="flex items-center justify-between mb-2">
+          <span className="text-xs font-medium text-gray-700">Section Agreement Progress</span>
+          <span className="text-xs font-medium text-gray-500">{checkedCount} / {totalSections} sections agreed</span>
+        </div>
+        <div className="w-full bg-gray-200 rounded-full h-2">
+          <div className="bg-green-500 h-2 rounded-full transition-all" style={{ width: `${(checkedCount / totalSections) * 100}%` }} />
         </div>
       </div>
 
       {/* Contract Header */}
-      <Section id="§" title="Contract Header" expanded={expanded === 'header'} onToggle={() => toggle('header')} badge="Configure">
+      <Section id="header" title="Contract Header" expanded={expanded === 'header'} onToggle={() => toggle('header')} badge="Configure" checks={checks} toggleCheck={toggleCheck}>
         <div className="grid grid-cols-2 gap-4 mb-4">
           <Field label="Provider">
             <div className="bg-gray-50 rounded-lg px-3 py-2 text-sm font-medium text-gray-900">Sweet Dreams US LLC</div>
@@ -230,7 +339,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 1: Definitions */}
-      <Section id="§1" title="Definitions" expanded={expanded === 's1'} onToggle={() => toggle('s1')}>
+      <Section id="s1" title="Definitions" expanded={expanded === 's1'} onToggle={() => toggle('s1')} checks={checks} toggleCheck={toggleCheck}>
         <P><strong>&ldquo;Provider&rdquo;</strong> — Sweet Dreams US LLC, a media production and growth marketing company based in Fort Wayne, Indiana.</P>
         <P><strong>&ldquo;Client&rdquo;</strong> — MC Sim Racing & RC Lounge, a racing simulator entertainment business based in Fort Wayne, Indiana.</P>
         <P><strong>&ldquo;Baseline Revenue&rdquo;</strong> — The trailing average monthly gross revenue of the Client prior to the Effective Date, established through verified financial records. Used as the benchmark against which growth is measured.</P>
@@ -248,7 +357,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 2: Partnership Overview */}
-      <Section id="§2" title="Partnership Overview" expanded={expanded === 's2'} onToggle={() => toggle('s2')}>
+      <Section id="s2" title="Partnership Overview" expanded={expanded === 's2'} onToggle={() => toggle('s2')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">2.1 Purpose</h4>
         <P>This Agreement establishes a performance-based growth partnership between Sweet Dreams US LLC and MC Sim Racing & RC Lounge. Unlike traditional agency retainers where the agency earns the same fee regardless of results, this partnership ties the Provider&rsquo;s compensation directly to the Client&rsquo;s revenue growth. Both parties share the risk and the reward.</P>
 
@@ -262,7 +371,7 @@ function PreFinalizationView({
         <div className="overflow-x-auto">
           <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
             <tbody className="divide-y divide-gray-200">
-              <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700 w-1/3">Business Size Tier</td><td className="px-3 py-2">Micro (Under $10,000/month)</td></tr>
+              <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700 w-1/3">Business Size Tier</td><td className="px-3 py-2">{tierRates.categoryLabel}</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Estimated Monthly Baseline</td><td className="px-3 py-2">{fmt(terms.monthlyBaseline)} /month (to be verified)</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Estimated Annual Baseline</td><td className="px-3 py-2">{fmt(annualBaseline)} /year</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Industry</td><td className="px-3 py-2">Entertainment / Racing Simulation</td></tr>
@@ -274,7 +383,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 3: Baseline Revenue Determination */}
-      <Section id="§3" title="Baseline Revenue Determination" expanded={expanded === 's3'} onToggle={() => toggle('s3')} badge="Configure">
+      <Section id="s3" title="Baseline Revenue Determination" expanded={expanded === 's3'} onToggle={() => toggle('s3')} badge="Configure" checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">3.1 Method</h4>
         <P>The Baseline Revenue shall be determined by calculating the trailing average of the Client&rsquo;s monthly gross revenue for the most recent period available prior to the Effective Date. Both parties must agree on the final Baseline figure before this Agreement becomes binding.</P>
 
@@ -322,13 +431,13 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 4: Fee Structure */}
-      <Section id="§4" title="Fee Structure" expanded={expanded === 's4'} onToggle={() => toggle('s4')} badge="Configure">
+      <Section id="s4" title="Fee Structure" expanded={expanded === 's4'} onToggle={() => toggle('s4')} badge="Configure" checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">4.1 Foundation Fee</h4>
         <P>The Foundation Fee is an annual minimum commitment based on the Client&rsquo;s Baseline Revenue. It represents the Client&rsquo;s investment in the partnership and covers the Provider&rsquo;s cost of entry.</P>
         <div className="overflow-x-auto mb-4">
           <table className="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
             <tbody className="divide-y divide-gray-200">
-              <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700 w-1/3">Rate</td><td className="px-3 py-2">Determined by size tier (see Grand Slam Tracker)</td></tr>
+              <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700 w-1/3">Rate</td><td className="px-3 py-2">{(tierRates.foundationFeeRate * 100).toFixed(1)}% of annual baseline ({tierRates.categoryLabel})</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Payment Options</td><td className="px-3 py-2">Annual lump sum OR quarterly installments</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Year 1</td><td className="px-3 py-2 text-green-700 font-medium">Deferred — no Foundation Fee in Year 1</td></tr>
               <tr><td className="px-3 py-2 bg-gray-50 font-medium text-gray-700">Year 2+</td><td className="px-3 py-2">Calculated on the new Baseline at renewal</td></tr>
@@ -338,7 +447,7 @@ function PreFinalizationView({
         </div>
 
         <h4 className="text-sm font-semibold text-gray-900 mb-2">4.2 Minimum Monthly Fee</h4>
-        <P>Because the Client falls within the Micro tier, a Minimum Monthly Fee is required to ensure the partnership remains economically viable for the Provider. This fee functions as a floor during Year 1.</P>
+        <P>Because the Client falls within the {tierRates.categoryLabel} tier, a Minimum Monthly Fee is required to ensure the partnership remains economically viable for the Provider. This fee functions as a floor during Year 1.</P>
         <div className="bg-amber-50 rounded-lg p-4 border border-amber-200 mb-4">
           <div className="overflow-x-auto mb-3">
             <table className="w-full text-sm border border-amber-200 rounded-lg overflow-hidden">
@@ -372,11 +481,11 @@ function PreFinalizationView({
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-200">
-              {tierRates.tiers.slice(0, 5).map(tier => (
+              {tierRates.tiers.map(tier => (
                 <tr key={tier.tierNumber}>
                   <td className="px-3 py-2 font-medium text-gray-900">Tier {tier.tierNumber}</td>
                   <td className="px-3 py-2 text-gray-600">{tier.label} above baseline</td>
-                  <td className="px-3 py-2 text-right text-gray-500">{fmt(terms.monthlyBaseline + Math.round(tier.growthFloor * terms.monthlyBaseline))} – {fmt(terms.monthlyBaseline + Math.round(Math.min(tier.growthCeiling, 5) * terms.monthlyBaseline))}</td>
+                  <td className="px-3 py-2 text-right text-gray-500">{fmt(terms.monthlyBaseline + Math.round(tier.growthFloor * terms.monthlyBaseline))} – {tier.growthCeiling < 100 ? fmt(terms.monthlyBaseline + Math.round(tier.growthCeiling * terms.monthlyBaseline)) : '∞'}</td>
                   <td className="px-3 py-2 text-right font-medium text-mcracing-600">{(tier.feeRate * 100).toFixed(1)}%</td>
                 </tr>
               ))}
@@ -456,7 +565,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 5: Revenue Reporting & Payment */}
-      <Section id="§5" title="Revenue Reporting & Payment" expanded={expanded === 's5'} onToggle={() => toggle('s5')}>
+      <Section id="s5" title="Revenue Reporting & Payment" expanded={expanded === 's5'} onToggle={() => toggle('s5')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">5.1 Revenue Transparency</h4>
         <P>The Client agrees to provide full transparency into monthly gross revenue figures. This is the foundation of the performance-based model. Without accurate revenue data, fees cannot be calculated and the partnership cannot function.</P>
 
@@ -497,7 +606,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 6: Scope of Services */}
-      <Section id="§6" title="Scope of Services" expanded={expanded === 's6'} onToggle={() => toggle('s6')}>
+      <Section id="s6" title="Scope of Services" expanded={expanded === 's6'} onToggle={() => toggle('s6')} checks={checks} toggleCheck={toggleCheck}>
         <P>The Provider shall deliver services across six core pillars. These pillars represent the full scope of marketing, media, and growth infrastructure that the Provider will build and manage for the Client.</P>
 
         <h4 className="text-sm font-semibold text-gray-900 mb-2">6.1 Content Engine</h4>
@@ -552,7 +661,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 7: Client Obligations */}
-      <Section id="§7" title="Client Obligations" expanded={expanded === 's7'} onToggle={() => toggle('s7')}>
+      <Section id="s7" title="Client Obligations" expanded={expanded === 's7'} onToggle={() => toggle('s7')} checks={checks} toggleCheck={toggleCheck}>
         <P>The success of this partnership depends on both parties fulfilling their commitments. The Client agrees to the following obligations:</P>
 
         <h4 className="text-sm font-semibold text-gray-900 mb-2">7.1 Financial Infrastructure</h4>
@@ -590,7 +699,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 8: Provider Obligations */}
-      <Section id="§8" title="Provider Obligations" expanded={expanded === 's8'} onToggle={() => toggle('s8')}>
+      <Section id="s8" title="Provider Obligations" expanded={expanded === 's8'} onToggle={() => toggle('s8')} checks={checks} toggleCheck={toggleCheck}>
         <P>The Provider agrees to the following commitments:</P>
 
         <h4 className="text-sm font-semibold text-gray-900 mb-2">8.1 Service Delivery</h4>
@@ -616,7 +725,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 9: Intellectual Property */}
-      <Section id="§9" title="Intellectual Property & Content Ownership" expanded={expanded === 's9'} onToggle={() => toggle('s9')}>
+      <Section id="s9" title="Intellectual Property & Content Ownership" expanded={expanded === 's9'} onToggle={() => toggle('s9')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">9.1 Content Ownership</h4>
         <P>All photos, videos, graphics, and marketing content created by the Provider specifically for the Client shall become the property of the Client upon creation. The Client may use this content in perpetuity, regardless of whether the Agreement is renewed or terminated.</P>
 
@@ -639,7 +748,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 10: Termination */}
-      <Section id="§10" title="Termination" expanded={expanded === 's10'} onToggle={() => toggle('s10')}>
+      <Section id="s10" title="Termination" expanded={expanded === 's10'} onToggle={() => toggle('s10')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">10.1 Termination by Mutual Agreement</h4>
         <P>Either party may propose termination at any time. If both parties agree in writing, the Agreement terminates on the mutually agreed-upon date. Fees owed through the termination date remain due.</P>
 
@@ -686,7 +795,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 11: Exit & Buyout */}
-      <Section id="§11" title="Exit & Buyout" expanded={expanded === 's11'} onToggle={() => toggle('s11')}>
+      <Section id="s11" title="Exit & Buyout" expanded={expanded === 's11'} onToggle={() => toggle('s11')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">11.1 Purpose</h4>
         <P>The Buyout Fee compensates the Provider for the value of systems, workflows, and growth infrastructure built during the partnership. It prevents the Client from benefiting from the Provider&rsquo;s investment (time, strategy, IP) without fair compensation after walking away.</P>
 
@@ -756,7 +865,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 12: Renewal */}
-      <Section id="§12" title="Renewal" expanded={expanded === 's12'} onToggle={() => toggle('s12')}>
+      <Section id="s12" title="Renewal" expanded={expanded === 's12'} onToggle={() => toggle('s12')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">12.1 Renewal Process</h4>
         <P>Beginning sixty (60) days before the end of the contract term, both parties shall initiate a renewal review. This includes pulling Year 1 performance data, calculating the average monthly fee, assessing the relationship quality, and projecting the Year 2 baseline and fee structure.</P>
 
@@ -827,7 +936,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 13: Confidentiality */}
-      <Section id="§13" title="Confidentiality" expanded={expanded === 's13'} onToggle={() => toggle('s13')}>
+      <Section id="s13" title="Confidentiality" expanded={expanded === 's13'} onToggle={() => toggle('s13')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">13.1 Mutual Obligations</h4>
         <P>Both parties agree to keep confidential all non-public business information, financial data, strategies, customer lists, pricing structures, and internal processes shared during the course of this partnership. This obligation survives termination of this Agreement for a period of two (2) years.</P>
 
@@ -839,7 +948,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 14: Limitation of Liability */}
-      <Section id="§14" title="Limitation of Liability" expanded={expanded === 's14'} onToggle={() => toggle('s14')}>
+      <Section id="s14" title="Limitation of Liability" expanded={expanded === 's14'} onToggle={() => toggle('s14')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">14.1 No Revenue Guarantee</h4>
         <P>The Provider does not guarantee any specific revenue outcome, growth percentage, or financial result. Marketing and growth services are subject to market conditions, consumer behavior, competition, and other factors outside the Provider&rsquo;s control. The performance-based fee structure reflects this shared risk.</P>
 
@@ -854,7 +963,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 15: Dispute Resolution */}
-      <Section id="§15" title="Dispute Resolution" expanded={expanded === 's15'} onToggle={() => toggle('s15')}>
+      <Section id="s15" title="Dispute Resolution" expanded={expanded === 's15'} onToggle={() => toggle('s15')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">15.1 Good Faith Negotiation</h4>
         <P>In the event of any dispute arising under this Agreement, both parties agree to first attempt to resolve the matter through direct, good faith negotiation between the principals (Cole at Sweet Dreams and {terms.clientOwner} at MC Racing).</P>
 
@@ -866,7 +975,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 16: General Provisions */}
-      <Section id="§16" title="General Provisions" expanded={expanded === 's16'} onToggle={() => toggle('s16')}>
+      <Section id="s16" title="General Provisions" expanded={expanded === 's16'} onToggle={() => toggle('s16')} checks={checks} toggleCheck={toggleCheck}>
         <h4 className="text-sm font-semibold text-gray-900 mb-2">16.1 Entire Agreement</h4>
         <P>This Agreement constitutes the entire understanding between the parties and supersedes all prior negotiations, representations, and agreements, whether written or oral. Any amendments must be in writing and signed by both parties.</P>
 
@@ -899,7 +1008,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 17: Growth Targets & Milestones */}
-      <Section id="§17" title="Growth Targets & Milestones (Non-Binding)" expanded={expanded === 's17'} onToggle={() => toggle('s17')}>
+      <Section id="s17" title="Growth Targets & Milestones (Non-Binding)" expanded={expanded === 's17'} onToggle={() => toggle('s17')} checks={checks} toggleCheck={toggleCheck}>
         <P>The following targets represent shared goals for the partnership. They are not guarantees and do not create additional obligations. They serve as benchmarks for Decision Meetings and renewal conversations.</P>
 
         <h4 className="text-sm font-semibold text-gray-900 mb-2">17.1 Revenue Milestones</h4>
@@ -968,7 +1077,7 @@ function PreFinalizationView({
       </Section>
 
       {/* Section 18: Signatures */}
-      <Section id="§18" title="Signatures" expanded={expanded === 's18'} onToggle={() => toggle('s18')}>
+      <Section id="s18" title="Signatures" expanded={expanded === 's18'} onToggle={() => toggle('s18')} checks={checks} toggleCheck={toggleCheck}>
         <P>By signing below, both parties acknowledge that they have read, understood, and agree to all terms and conditions set forth in this Agreement.</P>
         <div className="grid grid-cols-2 gap-6 mt-4">
           <div className="border-t-2 border-gray-300 pt-4">
@@ -985,23 +1094,40 @@ function PreFinalizationView({
       </Section>
 
       {/* Finalize */}
-      <div className="bg-white rounded-xl border-2 border-mcracing-200 p-5">
+      <div className={`bg-white rounded-xl border-2 p-5 ${allChecked ? 'border-green-300' : 'border-gray-200'}`}>
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-gray-900">Ready to Finalize?</h3>
+            <h3 className="text-sm font-semibold text-gray-900">
+              {allChecked ? 'All Sections Agreed — Ready to Finalize' : `${checkedCount} / ${totalSections} Sections Agreed`}
+            </h3>
             <p className="text-xs text-gray-500 mt-0.5">
-              {terms.clientOwner} + Cole agree on: {fmt(terms.monthlyBaseline)}/mo baseline | {terms.contractLength} months | {FULL_MONTHS[terms.effectiveMonth - 1]} {terms.effectiveYear} | {fmt(terms.minimumMonthlyFee)} minimum
+              {allChecked
+                ? `${terms.clientOwner} + Cole agree on: ${fmt(terms.monthlyBaseline)}/mo baseline | ${terms.contractLength} months | ${FULL_MONTHS[terms.effectiveMonth - 1]} ${terms.effectiveYear} | ${fmt(terms.minimumMonthlyFee)} minimum`
+                : 'Both Provider and Client must check off every section before the contract can be finalized.'
+              }
             </p>
           </div>
-          {!showConfirm ? (
-            <button onClick={() => setShowConfirm(true)} className="px-5 py-2.5 bg-mcracing-600 text-white rounded-lg text-sm font-medium hover:bg-mcracing-700 transition-colors">Finalize Contract</button>
-          ) : (
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1 text-amber-600"><AlertCircle className="h-4 w-4" /><span className="text-xs font-medium">Locks for {terms.contractLength} months</span></div>
-              <button onClick={onFinalize} className="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Confirm & Lock</button>
-              <button onClick={() => setShowConfirm(false)} className="px-3 py-2.5 text-gray-500 text-sm hover:bg-gray-100 rounded-lg">Cancel</button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            <button onClick={handlePrint} className="px-4 py-2.5 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors print:hidden flex items-center gap-1.5">
+              <Printer className="h-3.5 w-3.5" />
+              Print
+            </button>
+            {!showConfirm ? (
+              <button
+                onClick={() => setShowConfirm(true)}
+                disabled={!allChecked}
+                className={`px-5 py-2.5 rounded-lg text-sm font-medium transition-colors print:hidden ${allChecked ? 'bg-green-600 text-white hover:bg-green-700' : 'bg-gray-200 text-gray-400 cursor-not-allowed'}`}
+              >
+                Finalize Contract
+              </button>
+            ) : (
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1 text-amber-600"><AlertCircle className="h-4 w-4" /><span className="text-xs font-medium">Locks for {terms.contractLength} months</span></div>
+                <button onClick={onFinalize} className="px-5 py-2.5 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700">Confirm & Lock</button>
+                <button onClick={() => setShowConfirm(false)} className="px-3 py-2.5 text-gray-500 text-sm hover:bg-gray-100 rounded-lg">Cancel</button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -1028,6 +1154,8 @@ function PostFinalizationView({ terms, rows, loading, onUnlock }: {
   const endMonth = ((terms.effectiveMonth - 1 + terms.contractLength - 1) % 12)
   const endYear = terms.effectiveYear + Math.floor((terms.effectiveMonth - 1 + terms.contractLength - 1) / 12)
 
+  const handlePrint = () => window.print()
+
   return (
     <div className="space-y-5">
       <div className="bg-green-50 border border-green-200 rounded-xl p-4 flex items-center gap-3">
@@ -1039,7 +1167,12 @@ function PostFinalizationView({ terms, rows, loading, onUnlock }: {
             {terms.clientOwner} + Cole | {fmt(terms.monthlyBaseline)}/mo baseline | {FULL_MONTHS[terms.effectiveMonth - 1]} {terms.effectiveYear} — {FULL_MONTHS[endMonth]} {endYear}
           </p>
         </div>
-        <Lock className="h-5 w-5 text-green-400" />
+        <div className="flex items-center gap-2 print:hidden">
+          <button onClick={handlePrint} className="p-2 text-green-600 hover:bg-green-100 rounded-lg transition-colors">
+            <Printer className="h-4 w-4" />
+          </button>
+          <Lock className="h-5 w-5 text-green-400" />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -1107,27 +1240,16 @@ function PostFinalizationView({ terms, rows, loading, onUnlock }: {
                   </>
                 )}
               </tbody>
-              <tfoot className="bg-gray-50 font-medium text-sm">
-                <tr>
-                  <td className="px-3 py-2 font-semibold">YTD Total</td>
-                  <td className="px-3 py-2 text-right">{fmt(ytdRevenue)}</td>
-                  <td className="px-3 py-2" />
-                  <td className="px-3 py-2 text-right text-green-600">{fmt(activeRows.reduce((s, r) => s + r.uplift, 0))}</td>
-                  <td className="px-3 py-2 text-right text-indigo-600">{fmt(ytdFees)}</td>
-                  <td className="px-3 py-2 text-right font-bold">{fmt(ytdNet)}</td>
-                  <td className="px-3 py-2 text-right text-purple-600">{fmt(ytdSD)}</td>
-                </tr>
-              </tfoot>
             </table>
-            {activeRows.some(r => r.minimumApplied) && (
-              <p className="px-3 py-1.5 text-xs text-amber-600">* Minimum monthly fee of {fmt(terms.minimumMonthlyFee)} applied (Growth Fee was lower)</p>
-            )}
+            <div className="px-3 py-2 text-xs text-gray-400">* Minimum monthly fee of {fmt(terms.minimumMonthlyFee)} applied</div>
           </div>
         )}
       </div>
 
-      <div className="flex justify-end">
-        <button onClick={onUnlock} className="text-xs text-gray-400 hover:text-red-500 transition-colors">Admin: Unlock Contract for Editing</button>
+      <div className="print:hidden">
+        <button onClick={onUnlock} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+          Admin: Unlock contract for editing
+        </button>
       </div>
     </div>
   )
