@@ -1,28 +1,53 @@
 /**
  * Metricool API Integration
- * API Documentation: https://app.metricool.com/api-info
+ * API Documentation: https://app.metricool.com/resources/apidocs/index.html
+ *
+ * Auth: X-Mc-Auth header with userToken, plus userId & blogId query params
+ * Date format: YYYYMMDD
  *
  * Your brands:
- * - Sweet Dreams (our business)
- * - Crooked Lake Sandbar Music Festival (management client)
- * - Fort Wayne Direct Primary Care (management client)
- * - MC Sim Racing Fort Wayne (Partnership client)
+ * - Sweet Dreams Music (id: 5773395)
+ * - Fort Wayne Direct Primary Care (id: 5773452)
+ * - MC Sim Racing (id: 5773453)
+ * - Crooked Lake Sandbar Music Festival (id: 5773454)
+ * - Bell's Skating Rink (id: 5836312)
+ * - Prime Dealer Equity Fund (id: 5891018)
  */
 
 const METRICOOL_API_BASE = 'https://app.metricool.com/api'
+const METRICOOL_USER_ID = 4472067
+
+// Brand IDs for quick reference
+export const METRICOOL_BRANDS = {
+  sweetDreams: 5773395,
+  fortWayneDPC: 5773452,
+  mcRacing: 5773453,
+  sandbarFest: 5773454,
+  bellsRink: 5836312,
+  primeDealerEquity: 5891018,
+} as const
 
 // Types based on Metricool API responses
 export interface MetricoolBrand {
   id: number
-  name: string
-  blogUrl: string | null
+  userId: number
+  label: string
+  url: string | null
+  picture: string | null
+  facebook: string | null
+  instagram: string | null
+  youtube: string | null
+  tiktok: string | null
+  twitter: string | null
+  linkedinCompany: string | null
+  threads: string | null
+  bluesky: string | null
   timezone: string
-  networks: MetricoolNetwork[]
 }
 
 export interface MetricoolNetwork {
   id: string
-  network: string // 'facebook', 'instagram', 'twitter', 'linkedin', 'tiktok', 'youtube', etc.
+  network: string
   name: string
   profileUrl: string
   profileImage: string | null
@@ -76,25 +101,34 @@ export interface MetricoolWebAnalytics {
 
 /**
  * Metricool API Client
+ * Uses X-Mc-Auth header + userId/blogId query params
  */
 export class MetricoolClient {
   private token: string
+  private userId: number
 
-  constructor(token: string) {
+  constructor(token: string, userId: number = METRICOOL_USER_ID) {
     this.token = token
+    this.userId = userId
+  }
+
+  private buildUrl(endpoint: string, blogId: number, extraParams?: Record<string, string>): string {
+    const params = new URLSearchParams({
+      userId: String(this.userId),
+      blogId: String(blogId),
+      ...extraParams,
+    })
+    return `${METRICOOL_API_BASE}${endpoint}?${params}`
   }
 
   private async request<T>(
-    endpoint: string,
+    url: string,
     options: RequestInit = {}
   ): Promise<T> {
-    const url = `${METRICOOL_API_BASE}${endpoint}`
-
     const response = await fetch(url, {
       ...options,
       headers: {
-        'Authorization': `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
+        'X-Mc-Auth': this.token,
         'Accept': 'application/json',
         ...options.headers,
       },
@@ -115,92 +149,108 @@ export class MetricoolClient {
    * Get all brands (accounts) connected to this Metricool account
    */
   async getBrands(): Promise<MetricoolBrand[]> {
-    return this.request<MetricoolBrand[]>('/v1/brands')
-  }
-
-  /**
-   * Get a specific brand by ID
-   */
-  async getBrand(brandId: number): Promise<MetricoolBrand> {
-    return this.request<MetricoolBrand>(`/v1/brands/${brandId}`)
-  }
-
-  /**
-   * Get analytics summary for a brand
-   */
-  async getAnalyticsSummary(
-    brandId: number,
-    startDate: string, // YYYY-MM-DD
-    endDate: string    // YYYY-MM-DD
-  ): Promise<MetricoolAnalyticsSummary[]> {
     const params = new URLSearchParams({
-      init: startDate,
-      end: endDate,
+      userToken: this.token,
     })
-    return this.request<MetricoolAnalyticsSummary[]>(
-      `/v1/brands/${brandId}/analytics/summary?${params}`
+    return this.request<MetricoolBrand[]>(
+      `${METRICOOL_API_BASE}/admin/simpleProfiles?${params}`
     )
   }
 
   /**
-   * Get posts for a brand
+   * Get Instagram analytics for a brand
    */
-  async getPosts(
-    brandId: number,
-    startDate: string,
-    endDate: string,
-    network?: string,
-    limit: number = 100
-  ): Promise<MetricoolPost[]> {
-    const params = new URLSearchParams({
-      init: startDate,
+  async getInstagramAnalytics(
+    blogId: number,
+    startDate: string, // YYYYMMDD
+    endDate: string    // YYYYMMDD
+  ): Promise<Record<string, unknown>> {
+    const url = this.buildUrl('/stats/instagram/posts', blogId, {
+      start: startDate,
       end: endDate,
-      limit: limit.toString(),
     })
-    if (network) {
-      params.set('network', network)
-    }
-    return this.request<MetricoolPost[]>(
-      `/v1/brands/${brandId}/posts?${params}`
-    )
+    return this.request<Record<string, unknown>>(url)
   }
 
   /**
-   * Get follower history for a brand
+   * Get Facebook analytics for a brand
    */
-  async getFollowerHistory(
-    brandId: number,
-    startDate: string,
-    endDate: string,
-    network?: string
-  ): Promise<MetricoolFollowerHistory[]> {
-    const params = new URLSearchParams({
-      init: startDate,
-      end: endDate,
-    })
-    if (network) {
-      params.set('network', network)
-    }
-    return this.request<MetricoolFollowerHistory[]>(
-      `/v1/brands/${brandId}/followers?${params}`
-    )
-  }
-
-  /**
-   * Get web analytics (if Google Analytics is connected)
-   */
-  async getWebAnalytics(
-    brandId: number,
+  async getFacebookAnalytics(
+    blogId: number,
     startDate: string,
     endDate: string
-  ): Promise<MetricoolWebAnalytics[]> {
-    const params = new URLSearchParams({
-      init: startDate,
+  ): Promise<Record<string, unknown>> {
+    const url = this.buildUrl('/stats/facebook/posts', blogId, {
+      start: startDate,
       end: endDate,
     })
-    return this.request<MetricoolWebAnalytics[]>(
-      `/v1/brands/${brandId}/analytics/web?${params}`
-    )
+    return this.request<Record<string, unknown>>(url)
+  }
+
+  /**
+   * Get stats values for a category
+   * Categories: 'facebook', 'instagram', 'twitter', 'youtube', 'tiktok', 'linkedin', etc.
+   */
+  async getStatsValues(
+    blogId: number,
+    category: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Record<string, unknown>> {
+    const url = this.buildUrl(`/stats/values/${category}`, blogId, {
+      start: startDate,
+      end: endDate,
+    })
+    return this.request<Record<string, unknown>>(url)
+  }
+
+  /**
+   * Get stats timeline for a metric
+   */
+  async getStatsTimeline(
+    blogId: number,
+    metric: string,
+    startDate: string,
+    endDate: string
+  ): Promise<unknown[]> {
+    const url = this.buildUrl(`/stats/timeline/${metric}`, blogId, {
+      start: startDate,
+      end: endDate,
+    })
+    return this.request<unknown[]>(url)
+  }
+
+  /**
+   * Get aggregated stats
+   */
+  async getStatsAggregation(
+    blogId: number,
+    metric: string,
+    startDate: string,
+    endDate: string
+  ): Promise<Record<string, unknown>> {
+    const url = this.buildUrl(`/stats/aggregation/${metric}`, blogId, {
+      start: startDate,
+      end: endDate,
+    })
+    return this.request<Record<string, unknown>>(url)
+  }
+
+  /**
+   * Get community demographics (gender, age, country, city)
+   */
+  async getCommunityStats(
+    blogId: number,
+    statType: 'gender' | 'age' | 'country' | 'city',
+    provider: string,
+    startDate: string,
+    endDate: string
+  ): Promise<unknown> {
+    const url = this.buildUrl(`/stats/${statType}/${provider}`, blogId, {
+      start: startDate,
+      end: endDate,
+    })
+    return this.request<unknown>(url)
   }
 }
 
@@ -216,14 +266,17 @@ export function createMetricoolClient(): MetricoolClient {
 }
 
 /**
- * Format date for Metricool API (YYYY-MM-DD)
+ * Format date for Metricool API (YYYYMMDD)
  */
 export function formatMetricoolDate(date: Date): string {
-  return date.toISOString().split('T')[0]
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const d = String(date.getDate()).padStart(2, '0')
+  return `${y}${m}${d}`
 }
 
 /**
- * Get date range for current month
+ * Get date range for current month (YYYYMMDD format)
  */
 export function getCurrentMonthRange(): { start: string; end: string } {
   const now = new Date()
@@ -236,7 +289,7 @@ export function getCurrentMonthRange(): { start: string; end: string } {
 }
 
 /**
- * Get date range for last N days
+ * Get date range for last N days (YYYYMMDD format)
  */
 export function getLastNDaysRange(days: number): { start: string; end: string } {
   const end = new Date()
@@ -249,11 +302,22 @@ export function getLastNDaysRange(days: number): { start: string; end: string } 
 }
 
 /**
+ * Get date range for a specific month (YYYYMMDD format)
+ */
+export function getMonthRange(year: number, month: number): { start: string; end: string } {
+  const start = new Date(year, month - 1, 1)
+  const end = new Date(year, month, 0)
+  return {
+    start: formatMetricoolDate(start),
+    end: formatMetricoolDate(end),
+  }
+}
+
+/**
  * Normalize network name to lowercase standard
  */
 export function normalizeNetworkName(network: string): string {
   const normalized = network.toLowerCase()
-  // Map variations to standard names
   const mapping: Record<string, string> = {
     'fb': 'facebook',
     'ig': 'instagram',

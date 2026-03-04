@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import {
   createMetricoolClient,
-  getCurrentMonthRange,
   normalizeNetworkName,
+  getMonthRange,
 } from '@/lib/integrations/metricool'
 import { createServerClient } from '@/lib/supabase/client'
 
@@ -11,12 +11,6 @@ export const dynamic = 'force-dynamic'
 /**
  * POST /api/metricool/sync
  * Sync Metricool data to Supabase for a client
- *
- * Body:
- * - clientId: UUID of the client in our system
- * - brandId: Metricool brand ID
- * - year: (optional) year to sync, defaults to current
- * - month: (optional) month to sync, defaults to current
  */
 export async function POST(request: NextRequest) {
   try {
@@ -30,75 +24,62 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get date range
     const now = new Date()
     const targetYear = year || now.getFullYear()
     const targetMonth = month || now.getMonth() + 1
 
-    const startDate = `${targetYear}-${String(targetMonth).padStart(2, '0')}-01`
-    const endDate = new Date(targetYear, targetMonth, 0).toISOString().split('T')[0]
+    const { start, end } = getMonthRange(targetYear, targetMonth)
 
-    // Fetch from Metricool
     const metricool = createMetricoolClient()
-    const [analytics, brand] = await Promise.all([
-      metricool.getAnalyticsSummary(brandId, startDate, endDate),
-      metricool.getBrand(brandId),
-    ])
 
-    // Store in Supabase
+    // Fetch stats for each platform
+    const platforms = ['instagram', 'facebook', 'tiktok', 'youtube']
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const supabase = createServerClient() as any
     const results = []
 
-    for (const data of analytics) {
-      const platform = normalizeNetworkName(data.network)
+    for (const platform of platforms) {
+      try {
+        const data = await metricool.getStatsValues(brandId, platform, start, end)
+        if (!data || Object.keys(data).length === 0) continue
 
-      // Upsert into monthly_analytics
-      const { data: upserted, error } = await supabase
-        .from('monthly_analytics')
-        .upsert(
-          {
-            client_id: clientId,
-            year: targetYear,
-            month: targetMonth,
-            platform,
-            followers: data.followers,
-            follower_change: data.followersChange,
-            posts_published: data.posts,
-            reach: data.reach,
-            impressions: data.impressions,
-            engagements: data.interactions,
-            engagement_rate: data.interactionRate,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: 'client_id,year,month,platform',
-          }
-        )
-        .select()
+        const normalizedPlatform = normalizeNetworkName(platform)
 
-      if (error) {
-        console.error(`Error upserting analytics for ${platform}:`, error)
-        results.push({ platform, success: false, error: error.message })
-      } else {
-        results.push({ platform, success: true, data: upserted })
+        const { data: upserted, error } = await supabase
+          .from('monthly_analytics')
+          .upsert(
+            {
+              client_id: clientId,
+              year: targetYear,
+              month: targetMonth,
+              platform: normalizedPlatform,
+              followers: data.Followers || data.pageFollows || 0,
+              follower_change: data.page_daily_follows_unique || 0,
+              posts_published: 0,
+              reach: data.reach || 0,
+              impressions: data.impressions || data.page_posts_impressions || 0,
+              engagements: data.accounts_engaged || data.page_actions_post_reactions_total || 0,
+              engagement_rate: 0,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: 'client_id,year,month,platform' }
+          )
+          .select()
+
+        if (error) {
+          results.push({ platform: normalizedPlatform, success: false, error: error.message })
+        } else {
+          results.push({ platform: normalizedPlatform, success: true, data: upserted })
+        }
+      } catch {
+        // Platform not connected, skip
       }
     }
-
-    // Also update the client's metricool link
-    await supabase
-      .from('clients')
-      .update({
-        metricool_brand_id: brandId,
-        metricool_brand_name: brand.name,
-      })
-      .eq('id', clientId)
 
     return NextResponse.json({
       success: true,
       synced: {
         brandId,
-        brandName: brand.name,
         clientId,
         period: { year: targetYear, month: targetMonth },
         platforms: results,

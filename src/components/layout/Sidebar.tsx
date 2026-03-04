@@ -12,6 +12,8 @@ import {
   Settings,
   FlaskConical,
   Banknote,
+  Music,
+  Clock,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
@@ -22,13 +24,18 @@ const navigation = [
   { name: 'Financials', href: '/financials', icon: DollarSign, children: [
     { name: 'Payouts', href: '/financials/payouts', icon: Banknote },
   ]},
+  { name: 'Studio', href: '/studio', icon: Music, children: [
+    { name: 'Sessions', href: '/studio/sessions', icon: Clock },
+  ]},
   { name: 'Scenarios', href: '/scenarios', icon: Calculator },
   { name: 'Alerts', href: '/alerts', icon: Bell },
 ]
 
 const testClients = [
   { name: 'Monster Remodeling', href: '/test-clients/monster' },
-  { name: 'MC Racing', href: '/test-clients/mc-racing' },
+  { name: 'MC Racing', href: '/client/mcracing' },
+  { name: "Bell's Skating Rink", href: '/client/bells' },
+  { name: 'Miller Scaping', href: '/test-clients/miller' },
 ]
 
 export default function Sidebar() {

@@ -9,13 +9,7 @@ export const dynamic = 'force-dynamic'
 
 /**
  * GET /api/metricool/analytics?brandId=123&period=30d
- * Fetch analytics for a specific brand
- *
- * Query params:
- * - brandId: Metricool brand ID (required)
- * - period: '7d', '30d', '90d', 'month' (default: '30d')
- * - startDate: YYYY-MM-DD (optional, overrides period)
- * - endDate: YYYY-MM-DD (optional, overrides period)
+ * Fetch analytics for a specific brand using stats/values endpoints
  */
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +34,6 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Determine date range
     let startDate: string
     let endDate: string
 
@@ -60,19 +53,24 @@ export async function GET(request: NextRequest) {
 
     const client = createMetricoolClient()
 
-    // Fetch analytics summary
-    const analytics = await client.getAnalyticsSummary(brandId, startDate, endDate)
+    // Fetch stats for each platform
+    const platforms = ['instagram', 'facebook', 'tiktok', 'youtube']
+    const analytics: Record<string, unknown>[] = []
 
-    // Fetch brand info for context
-    const brand = await client.getBrand(brandId)
+    for (const platform of platforms) {
+      try {
+        const data = await client.getStatsValues(brandId, platform, startDate, endDate)
+        if (data && Object.keys(data).length > 0) {
+          analytics.push({ network: platform, ...data })
+        }
+      } catch {
+        // Platform may not be connected, skip
+      }
+    }
 
     return NextResponse.json({
       success: true,
-      brand: {
-        id: brand.id,
-        name: brand.name,
-        networks: brand.networks,
-      },
+      brand: { id: brandId },
       period: { startDate, endDate },
       analytics,
     })

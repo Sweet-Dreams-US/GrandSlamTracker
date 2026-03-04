@@ -562,3 +562,109 @@ CREATE POLICY "Super admin manages admins" ON admins
       AND role = 'super_admin'
     )
   );
+
+-- =====================
+-- STUDIO SESSIONS (Sweet Dreams Music / Sweet Dreams US)
+-- =====================
+
+CREATE TABLE IF NOT EXISTS studio_sessions (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  engineer TEXT NOT NULL,
+  session_type TEXT NOT NULL CHECK (session_type IN ('recording', 'media')),
+  studio TEXT CHECK (studio IN ('studio_a', 'studio_b')),
+  hours DECIMAL,
+  is_block BOOLEAN DEFAULT FALSE,
+  media_service_type TEXT,
+  media_role TEXT CHECK (media_role IN ('produced', 'upsold')),
+  client_name TEXT NOT NULL,
+  session_date DATE NOT NULL,
+  total_charge DECIMAL NOT NULL,
+  engineer_payout DECIMAL NOT NULL,
+  studio_payout DECIMAL NOT NULL,
+  bank_entity TEXT NOT NULL CHECK (bank_entity IN ('sweet_dreams_music', 'sweet_dreams_us')),
+  status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'paid')),
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_studio_sessions_engineer ON studio_sessions(engineer);
+CREATE INDEX IF NOT EXISTS idx_studio_sessions_date ON studio_sessions(session_date);
+CREATE INDEX IF NOT EXISTS idx_studio_sessions_status ON studio_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_studio_sessions_bank_entity ON studio_sessions(bank_entity);
+
+CREATE TRIGGER update_studio_sessions_updated_at
+    BEFORE UPDATE ON studio_sessions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE studio_sessions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins access" ON studio_sessions FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+
+-- =====================
+-- REVENUE ENTRIES (Granular per-day, per-category revenue for client portals)
+-- =====================
+
+CREATE TABLE IF NOT EXISTS revenue_entries (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id TEXT NOT NULL,
+  date DATE NOT NULL,
+  category TEXT NOT NULL,
+  amount DECIMAL NOT NULL,
+  quantity INTEGER DEFAULT 1,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_revenue_entries_client ON revenue_entries(client_id);
+CREATE INDEX IF NOT EXISTS idx_revenue_entries_date ON revenue_entries(date);
+CREATE INDEX IF NOT EXISTS idx_revenue_entries_category ON revenue_entries(category);
+CREATE INDEX IF NOT EXISTS idx_revenue_entries_client_date ON revenue_entries(client_id, date);
+
+CREATE TRIGGER update_revenue_entries_updated_at
+    BEFORE UPDATE ON revenue_entries
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE revenue_entries ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins access" ON revenue_entries FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);
+
+-- =====================
+-- MONTHLY EXPENSES (Monthly expense tracking for client portals)
+-- =====================
+
+CREATE TABLE IF NOT EXISTS monthly_expenses (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  client_id TEXT NOT NULL,
+  year INTEGER NOT NULL,
+  month INTEGER NOT NULL CHECK (month >= 1 AND month <= 12),
+  category TEXT NOT NULL,
+  label TEXT NOT NULL,
+  amount DECIMAL NOT NULL DEFAULT 0,
+  is_recurring BOOLEAN DEFAULT TRUE,
+  notes TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(client_id, year, month, category)
+);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_expenses_client ON monthly_expenses(client_id);
+CREATE INDEX IF NOT EXISTS idx_monthly_expenses_date ON monthly_expenses(year, month);
+
+CREATE TRIGGER update_monthly_expenses_updated_at
+    BEFORE UPDATE ON monthly_expenses
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+ALTER TABLE monthly_expenses ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Admins access" ON monthly_expenses FOR ALL USING (
+  EXISTS (SELECT 1 FROM admins WHERE email = auth.jwt() ->> 'email' AND is_active = TRUE)
+);

@@ -1,10 +1,15 @@
 'use client'
 
 import { useState } from 'react'
+import dynamic from 'next/dynamic'
 import Image from 'next/image'
 import { LogOut } from 'lucide-react'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 import MonsterScenario from '@/components/test-clients/MonsterScenario'
+
+const BellsContent = dynamic(() => import('@/components/clients/BellsContent'), { ssr: false })
+const MillerContent = dynamic(() => import('@/components/clients/MillerContent'), { ssr: false })
+const MCRacingContent = dynamic(() => import('@/components/clients/MCRacingContent'), { ssr: false })
 
 interface UserAccount {
   username: string
@@ -16,6 +21,9 @@ interface UserAccount {
 const USERS: UserAccount[] = [
   { username: 'admin', password: 'NeverPonYourA7', role: 'admin' },
   { username: 'monster', password: 'RemodelingMonster', role: 'client', clientPortal: 'monster' },
+  { username: 'bells', password: 'SkateOrDie100', role: 'client', clientPortal: 'bells' },
+  { username: 'miller', password: 'LawnAndOrder2026', role: 'client', clientPortal: 'miller' },
+  { username: 'mcracing', password: 'RacingDreams2025', role: 'client', clientPortal: 'mcracing' },
 ]
 
 export default function AdminPasswordGate({ children }: { children: React.ReactNode }) {
@@ -99,6 +107,48 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
             Sign Out
           </button>
           <MonsterScenario mode="client" />
+        </div>
+      )
+    }
+    if (loggedInUser.clientPortal === 'bells') {
+      return (
+        <div className="relative">
+          <button
+            onClick={handleLogout}
+            className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-bells-100 text-bells-700 hover:bg-bells-200 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+          <BellsContent />
+        </div>
+      )
+    }
+    if (loggedInUser.clientPortal === 'miller') {
+      return (
+        <div className="relative">
+          <button
+            onClick={handleLogout}
+            className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-miller-100 text-miller-700 hover:bg-miller-200 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+          <MillerContent />
+        </div>
+      )
+    }
+    if (loggedInUser.clientPortal === 'mcracing') {
+      return (
+        <div className="relative">
+          <button
+            onClick={handleLogout}
+            className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-mcracing-100 text-mcracing-700 hover:bg-mcracing-200 transition-colors"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
+          </button>
+          <MCRacingContent />
         </div>
       )
     }

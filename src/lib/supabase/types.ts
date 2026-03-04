@@ -824,6 +824,144 @@ export interface Database {
           created_at?: string
         }
       }
+      studio_sessions: {
+        Row: {
+          id: string
+          engineer: string
+          session_type: 'recording' | 'media'
+          studio: 'studio_a' | 'studio_b' | null
+          hours: number | null
+          is_block: boolean
+          media_service_type: string | null
+          media_role: 'produced' | 'upsold' | null
+          client_name: string
+          session_date: string
+          total_charge: number
+          engineer_payout: number
+          studio_payout: number
+          bank_entity: 'sweet_dreams_music' | 'sweet_dreams_us'
+          status: 'pending' | 'approved' | 'paid'
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          engineer: string
+          session_type: 'recording' | 'media'
+          studio?: 'studio_a' | 'studio_b' | null
+          hours?: number | null
+          is_block?: boolean
+          media_service_type?: string | null
+          media_role?: 'produced' | 'upsold' | null
+          client_name: string
+          session_date: string
+          total_charge: number
+          engineer_payout: number
+          studio_payout: number
+          bank_entity: 'sweet_dreams_music' | 'sweet_dreams_us'
+          status?: 'pending' | 'approved' | 'paid'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          engineer?: string
+          session_type?: 'recording' | 'media'
+          studio?: 'studio_a' | 'studio_b' | null
+          hours?: number | null
+          is_block?: boolean
+          media_service_type?: string | null
+          media_role?: 'produced' | 'upsold' | null
+          client_name?: string
+          session_date?: string
+          total_charge?: number
+          engineer_payout?: number
+          studio_payout?: number
+          bank_entity?: 'sweet_dreams_music' | 'sweet_dreams_us'
+          status?: 'pending' | 'approved' | 'paid'
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      revenue_entries: {
+        Row: {
+          id: string
+          client_id: string
+          date: string
+          category: string
+          amount: number
+          quantity: number
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          date: string
+          category: string
+          amount: number
+          quantity?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          date?: string
+          category?: string
+          amount?: number
+          quantity?: number
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      monthly_expenses: {
+        Row: {
+          id: string
+          client_id: string
+          year: number
+          month: number
+          category: string
+          label: string
+          amount: number
+          is_recurring: boolean
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          year: number
+          month: number
+          category: string
+          label: string
+          amount?: number
+          is_recurring?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          year?: number
+          month?: number
+          category?: string
+          label?: string
+          amount?: number
+          is_recurring?: boolean
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -862,3 +1000,12 @@ export type SavedScenario = Tables<'saved_scenarios'>
 export type PayoutRecord = Tables<'payout_records'>
 export type PayoutTransaction = Tables<'payout_transactions'>
 export type Admin = Tables<'admins'>
+export type StudioSession = Tables<'studio_sessions'>
+export type StudioSessionInsert = InsertTables<'studio_sessions'>
+export type StudioSessionUpdate = UpdateTables<'studio_sessions'>
+export type RevenueEntry = Tables<'revenue_entries'>
+export type RevenueEntryInsert = InsertTables<'revenue_entries'>
+export type RevenueEntryUpdate = UpdateTables<'revenue_entries'>
+export type MonthlyExpense = Tables<'monthly_expenses'>
+export type MonthlyExpenseInsert = InsertTables<'monthly_expenses'>
+export type MonthlyExpenseUpdate = UpdateTables<'monthly_expenses'>
