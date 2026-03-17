@@ -54,7 +54,7 @@ export default function StudioOverview() {
   if (loading) {
     return (
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">Studio</h1>
+        <h1 className="text-2xl font-bold text-white mb-6">Studio</h1>
         <div className="text-center py-12 text-gray-500">Loading...</div>
       </div>
     )
@@ -64,7 +64,7 @@ export default function StudioOverview() {
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Studio</h1>
+          <h1 className="text-2xl font-bold text-white">Studio</h1>
           <p className="text-sm text-gray-500">Sweet Dreams Music &amp; Sweet Dreams US</p>
         </div>
         <Link
@@ -78,53 +78,53 @@ export default function StudioOverview() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-amber-100 rounded-lg"><Clock className="h-5 w-5 text-amber-700" /></div>
+            <div className="p-2 bg-amber-500/10 rounded-lg"><Clock className="h-5 w-5 text-amber-400" /></div>
             <p className="text-sm font-medium text-gray-500">Sessions This Month</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">{thisMonth.length}</p>
+          <p className="text-2xl font-bold text-white">{thisMonth.length}</p>
           <p className="text-xs text-gray-400 mt-1">{sessions.length} total all-time</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-100 rounded-lg"><Music className="h-5 w-5 text-blue-700" /></div>
+            <div className="p-2 bg-blue-500/10 rounded-lg"><Music className="h-5 w-5 text-blue-400" /></div>
             <p className="text-sm font-medium text-gray-500">Music Revenue</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">${musicRevenue.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-white">${musicRevenue.toFixed(2)}</p>
           <p className="text-xs text-gray-400 mt-1">Sweet Dreams Music (recording)</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-purple-100 rounded-lg"><Building2 className="h-5 w-5 text-purple-700" /></div>
+            <div className="p-2 bg-purple-500/10 rounded-lg"><Building2 className="h-5 w-5 text-purple-400" /></div>
             <p className="text-sm font-medium text-gray-500">US Revenue</p>
           </div>
-          <p className="text-2xl font-bold text-gray-900">${usRevenue.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-white">${usRevenue.toFixed(2)}</p>
           <p className="text-xs text-gray-400 mt-1">Sweet Dreams US (media)</p>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+        <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-green-100 rounded-lg"><DollarSign className="h-5 w-5 text-green-700" /></div>
+            <div className="p-2 bg-green-500/10 rounded-lg"><DollarSign className="h-5 w-5 text-green-400" /></div>
             <p className="text-sm font-medium text-gray-500">Pending Payouts</p>
           </div>
-          <p className="text-2xl font-bold text-amber-700">${pendingPayouts.toFixed(2)}</p>
+          <p className="text-2xl font-bold text-amber-400">${pendingPayouts.toFixed(2)}</p>
           <p className="text-xs text-gray-400 mt-1">Approved, awaiting payment</p>
         </div>
       </div>
 
       {/* Per-Engineer Breakdown */}
       {engineerStats.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 mb-8">
-          <div className="px-6 py-4 border-b border-gray-200 flex items-center gap-2">
+        <div className="bg-[#141414] rounded-xl border border-[#262626] mb-8">
+          <div className="px-6 py-4 border-b border-[#262626] flex items-center gap-2">
             <Users className="h-5 w-5 text-gray-400" />
-            <h2 className="text-lg font-semibold text-gray-900">Engineers</h2>
+            <h2 className="text-lg font-semibold text-white">Engineers</h2>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <thead className="bg-[#0A0A0A] text-gray-500 text-xs uppercase">
                 <tr>
                   <th className="text-left px-6 py-3">Engineer</th>
                   <th className="text-right px-6 py-3">Sessions</th>
@@ -133,16 +133,16 @@ export default function StudioOverview() {
                   <th className="text-right px-6 py-3">Pending</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[#262626]">
                 {engineerStats.map(eng => (
-                  <tr key={eng.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-3 font-medium text-gray-900">{eng.name}</td>
-                    <td className="px-6 py-3 text-right text-gray-700">{eng.totalSessions}</td>
-                    <td className="px-6 py-3 text-right text-gray-700">${eng.totalRevenue.toFixed(2)}</td>
-                    <td className="px-6 py-3 text-right text-green-700 font-medium">${eng.totalPayout.toFixed(2)}</td>
+                  <tr key={eng.id} className="hover:bg-[#0A0A0A]">
+                    <td className="px-6 py-3 font-medium text-white">{eng.name}</td>
+                    <td className="px-6 py-3 text-right text-gray-300">{eng.totalSessions}</td>
+                    <td className="px-6 py-3 text-right text-gray-300">${eng.totalRevenue.toFixed(2)}</td>
+                    <td className="px-6 py-3 text-right text-green-400 font-medium">${eng.totalPayout.toFixed(2)}</td>
                     <td className="px-6 py-3 text-right">
                       {eng.pending > 0 ? (
-                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-700">{eng.pending}</span>
+                        <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-500/10 text-yellow-400">{eng.pending}</span>
                       ) : (
                         <span className="text-gray-400">0</span>
                       )}
@@ -156,10 +156,10 @@ export default function StudioOverview() {
       )}
 
       {/* Recent Sessions */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Sessions</h2>
-          <Link href="/studio/sessions" className="text-sm text-amber-600 hover:text-amber-700 font-medium">
+      <div className="bg-[#141414] rounded-xl border border-[#262626]">
+        <div className="px-6 py-4 border-b border-[#262626] flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-white">Recent Sessions</h2>
+          <Link href="/studio/sessions" className="text-sm text-[#F4C430] hover:text-amber-400 font-medium">
             View All &rarr;
           </Link>
         </div>
@@ -168,7 +168,7 @@ export default function StudioOverview() {
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
-              <thead className="bg-gray-50 text-gray-500 text-xs uppercase">
+              <thead className="bg-[#0A0A0A] text-gray-500 text-xs uppercase">
                 <tr>
                   <th className="text-left px-6 py-3">Date</th>
                   <th className="text-left px-6 py-3">Engineer</th>
@@ -179,21 +179,21 @@ export default function StudioOverview() {
                   <th className="text-left px-6 py-3">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[#262626]">
                 {sessions.slice(0, 10).map(s => {
                   const engName = ENGINEERS.find(e => e.id === s.engineer)?.name || s.engineer
                   const statusColors: Record<string, string> = {
-                    pending: 'bg-yellow-100 text-yellow-700',
-                    approved: 'bg-blue-100 text-blue-700',
-                    paid: 'bg-green-100 text-green-700',
+                    pending: 'bg-yellow-500/10 text-yellow-400',
+                    approved: 'bg-blue-500/10 text-blue-400',
+                    paid: 'bg-green-500/10 text-green-400',
                   }
                   return (
-                    <tr key={s.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-3 text-gray-700">{new Date(s.session_date + 'T00:00:00').toLocaleDateString()}</td>
-                      <td className="px-6 py-3 font-medium text-gray-900">{engName}</td>
-                      <td className="px-6 py-3 text-gray-700">{s.client_name}</td>
-                      <td className="px-6 py-3 text-gray-700 capitalize">{s.session_type}</td>
-                      <td className="px-6 py-3 text-right font-medium text-gray-900">${Number(s.total_charge).toFixed(2)}</td>
+                    <tr key={s.id} className="hover:bg-[#0A0A0A]">
+                      <td className="px-6 py-3 text-gray-300">{new Date(s.session_date + 'T00:00:00').toLocaleDateString()}</td>
+                      <td className="px-6 py-3 font-medium text-white">{engName}</td>
+                      <td className="px-6 py-3 text-gray-300">{s.client_name}</td>
+                      <td className="px-6 py-3 text-gray-300 capitalize">{s.session_type}</td>
+                      <td className="px-6 py-3 text-right font-medium text-white">${Number(s.total_charge).toFixed(2)}</td>
                       <td className="px-6 py-3 text-gray-500 text-xs">{BANK_ENTITIES[s.bank_entity as keyof typeof BANK_ENTITIES]}</td>
                       <td className="px-6 py-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${statusColors[s.status]}`}>{s.status}</span>

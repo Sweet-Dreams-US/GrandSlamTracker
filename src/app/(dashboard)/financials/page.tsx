@@ -88,11 +88,11 @@ export default function FinancialsPage() {
 
       {/* Recent Payout Records */}
       <div className="card">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h3 className="font-semibold">Recent Payout Records</h3>
+        <div className="p-4 border-b border-[#262626] flex justify-between items-center">
+          <h3 className="font-semibold text-white">Recent Payout Records</h3>
           <Link
             href="/financials/payouts"
-            className="text-sm text-primary-600 hover:text-primary-700"
+            className="text-sm text-[#F4C430] hover:text-[#E5B72B]"
           >
             View All
           </Link>
@@ -130,8 +130,8 @@ export default function FinancialsPage() {
                     <td>{r.client_name}</td>
                     <td className="text-right font-medium">{fmt(Number(r.total_revenue))}</td>
                     <td className="text-right">{fmt(Number(r.business_amount))}</td>
-                    <td className="text-right text-green-700">{fmt(Number(r.sales_amount))}</td>
-                    <td className="text-right text-blue-700">{fmt(Number(r.worker_amount))}</td>
+                    <td className="text-right text-green-400">{fmt(Number(r.sales_amount))}</td>
+                    <td className="text-right text-blue-400">{fmt(Number(r.worker_amount))}</td>
                   </tr>
                 ))}
               </tbody>
@@ -140,8 +140,8 @@ export default function FinancialsPage() {
                   <td colSpan={3} className="font-medium">Total</td>
                   <td className="text-right font-bold">{fmt(totalRevenue)}</td>
                   <td className="text-right font-medium">{fmt(totalBusiness)}</td>
-                  <td className="text-right font-medium text-green-700">{fmt(totalSales)}</td>
-                  <td className="text-right font-medium text-blue-700">{fmt(totalWorker)}</td>
+                  <td className="text-right font-medium text-green-400">{fmt(totalSales)}</td>
+                  <td className="text-right font-medium text-blue-400">{fmt(totalWorker)}</td>
                 </tr>
               </tfoot>
             </table>

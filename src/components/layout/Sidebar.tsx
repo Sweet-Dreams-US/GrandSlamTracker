@@ -14,6 +14,9 @@ import {
   Banknote,
   Music,
   Clock,
+  Film,
+  Lightbulb,
+  Target,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
@@ -27,6 +30,10 @@ const navigation = [
   { name: 'Studio', href: '/studio', icon: Music, children: [
     { name: 'Sessions', href: '/studio/sessions', icon: Clock },
   ]},
+  { name: 'Content', href: '/content', icon: Film, children: [
+    { name: 'Ideas', href: '/content/ideas', icon: Lightbulb },
+  ]},
+  { name: 'Grand Slam', href: '/grand-slam', icon: Target },
   { name: 'Scenarios', href: '/scenarios', icon: Calculator },
   { name: 'Alerts', href: '/alerts', icon: Bell },
 ]
@@ -42,9 +49,9 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
+    <aside className="w-64 bg-[var(--surface)] border-r border-[var(--border)] flex flex-col">
       {/* Logo */}
-      <div className="h-16 flex items-center px-6 border-b border-gray-200">
+      <div className="h-16 flex items-center px-6 border-b border-[var(--border)]">
         <Link href="/" className="flex items-center">
           <Image src={sweetDreamsLogo} alt="Sweet Dreams" height={36} className="w-auto" />
         </Link>
@@ -62,8 +69,8 @@ export default function Sidebar() {
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
+                    ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+                    : 'text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]'
                 }`}
               >
                 <item.icon className="h-5 w-5" />
@@ -79,8 +86,8 @@ export default function Sidebar() {
                         href={child.href}
                         className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
                           childActive
-                            ? 'text-blue-700 bg-blue-50'
-                            : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                            ? 'text-[var(--accent)] bg-[var(--accent)]/10'
+                            : 'text-[var(--muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)]'
                         }`}
                       >
                         <child.icon className="h-3.5 w-3.5" />
@@ -95,8 +102,8 @@ export default function Sidebar() {
         })}
 
         {/* Test Clients Divider */}
-        <div className="pt-4 mt-4 border-t border-gray-200">
-          <p className="px-3 mb-2 text-xs font-semibold text-gray-400 uppercase tracking-wider">
+        <div className="pt-4 mt-4 border-t border-[var(--border)]">
+          <p className="px-3 mb-2 text-xs font-semibold text-[var(--muted)] uppercase tracking-wider">
             Test Clients
           </p>
           {testClients.map((item) => {
@@ -108,8 +115,8 @@ export default function Sidebar() {
                 href={item.href}
                 className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-blue-50 text-blue-700'
-                    : 'text-gray-700 hover:bg-gray-100'
+                    ? 'bg-[var(--accent)]/10 text-[var(--accent)]'
+                    : 'text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)]'
                 }`}
               >
                 <FlaskConical className="h-5 w-5" />
@@ -121,17 +128,17 @@ export default function Sidebar() {
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-gray-200">
+      <div className="p-4 border-t border-[var(--border)]">
         <Link
           href="/settings"
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] transition-colors"
         >
           <Settings className="h-5 w-5" />
           Settings
         </Link>
 
         {/* User Menu */}
-        <div className="mt-4 pt-4 border-t border-gray-100">
+        <div className="mt-4 pt-4 border-t border-[var(--border)]">
           <UserMenu />
         </div>
       </div>

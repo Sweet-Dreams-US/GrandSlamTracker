@@ -9,6 +9,10 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
+        accent: {
+          DEFAULT: '#F4C430',
+          hover: '#E5B72B',
+        },
         monster: {
           50: '#f5f0fa',
           100: '#ede5f3',

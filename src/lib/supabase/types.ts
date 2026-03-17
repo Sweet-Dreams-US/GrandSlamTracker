@@ -962,6 +962,223 @@ export interface Database {
           updated_at?: string
         }
       }
+      content_items: {
+        Row: {
+          id: string
+          client_id: string | null
+          title: string
+          description: string | null
+          content_type: 'video' | 'reel' | 'post' | 'story' | 'blog' | 'photo' | 'carousel'
+          status: 'idea' | 'filming' | 'editing' | 'review' | 'scheduled' | 'posted' | 'analyzed'
+          scheduled_date: string | null
+          posted_date: string | null
+          platforms: Json
+          raw_file_url: string | null
+          final_file_url: string | null
+          thumbnail_url: string | null
+          assigned_to: string | null
+          analytics: Json
+          ai_generated: boolean
+          ai_prompt: string | null
+          tags: string[]
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id?: string | null
+          title: string
+          description?: string | null
+          content_type: 'video' | 'reel' | 'post' | 'story' | 'blog' | 'photo' | 'carousel'
+          status?: 'idea' | 'filming' | 'editing' | 'review' | 'scheduled' | 'posted' | 'analyzed'
+          scheduled_date?: string | null
+          posted_date?: string | null
+          platforms?: Json
+          raw_file_url?: string | null
+          final_file_url?: string | null
+          thumbnail_url?: string | null
+          assigned_to?: string | null
+          analytics?: Json
+          ai_generated?: boolean
+          ai_prompt?: string | null
+          tags?: string[]
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string | null
+          title?: string
+          description?: string | null
+          content_type?: 'video' | 'reel' | 'post' | 'story' | 'blog' | 'photo' | 'carousel'
+          status?: 'idea' | 'filming' | 'editing' | 'review' | 'scheduled' | 'posted' | 'analyzed'
+          scheduled_date?: string | null
+          posted_date?: string | null
+          platforms?: Json
+          raw_file_url?: string | null
+          final_file_url?: string | null
+          thumbnail_url?: string | null
+          assigned_to?: string | null
+          analytics?: Json
+          ai_generated?: boolean
+          ai_prompt?: string | null
+          tags?: string[]
+          notes?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      content_ideas: {
+        Row: {
+          id: string
+          client_id: string | null
+          title: string
+          concept: string | null
+          inspiration_source: string | null
+          based_on_content_id: string | null
+          score: number | null
+          status: 'new' | 'approved' | 'rejected' | 'converted'
+          converted_to: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          client_id?: string | null
+          title: string
+          concept?: string | null
+          inspiration_source?: string | null
+          based_on_content_id?: string | null
+          score?: number | null
+          status?: 'new' | 'approved' | 'rejected' | 'converted'
+          converted_to?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string | null
+          title?: string
+          concept?: string | null
+          inspiration_source?: string | null
+          based_on_content_id?: string | null
+          score?: number | null
+          status?: 'new' | 'approved' | 'rejected' | 'converted'
+          converted_to?: string | null
+          created_at?: string
+        }
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_email: string
+          type: 'booking' | 'payment' | 'milestone' | 'content' | 'system'
+          title: string
+          body: string | null
+          link: string | null
+          read: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_email: string
+          type: 'booking' | 'payment' | 'milestone' | 'content' | 'system'
+          title: string
+          body?: string | null
+          link?: string | null
+          read?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_email?: string
+          type?: 'booking' | 'payment' | 'milestone' | 'content' | 'system'
+          title?: string
+          body?: string | null
+          link?: string | null
+          read?: boolean
+          created_at?: string
+        }
+      }
+      client_engines: {
+        Row: {
+          id: string
+          client_id: string
+          engine: 'content' | 'brand_assets' | 'social_management' | 'web_dev' | 'offer_refinement' | 'fluid_communication'
+          status: 'inactive' | 'setup' | 'active' | 'paused'
+          notes: string | null
+          activated_at: string | null
+        }
+        Insert: {
+          id?: string
+          client_id: string
+          engine: 'content' | 'brand_assets' | 'social_management' | 'web_dev' | 'offer_refinement' | 'fluid_communication'
+          status?: 'inactive' | 'setup' | 'active' | 'paused'
+          notes?: string | null
+          activated_at?: string | null
+        }
+        Update: {
+          id?: string
+          client_id?: string
+          engine?: 'content' | 'brand_assets' | 'social_management' | 'web_dev' | 'offer_refinement' | 'fluid_communication'
+          status?: 'inactive' | 'setup' | 'active' | 'paused'
+          notes?: string | null
+          activated_at?: string | null
+        }
+      }
+      grand_slam_worksheets: {
+        Row: {
+          id: string
+          client_id: string | null
+          dream_outcome: string | null
+          likelihood_score: number | null
+          time_to_result: string | null
+          time_delay_score: number | null
+          effort_required: string | null
+          effort_score: number | null
+          value_stack: Json
+          proposed_price: number | null
+          engines_active: Json
+          notes: string | null
+          status: 'draft' | 'presented' | 'accepted' | 'declined'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          client_id?: string | null
+          dream_outcome?: string | null
+          likelihood_score?: number | null
+          time_to_result?: string | null
+          time_delay_score?: number | null
+          effort_required?: string | null
+          effort_score?: number | null
+          value_stack?: Json
+          proposed_price?: number | null
+          engines_active?: Json
+          notes?: string | null
+          status?: 'draft' | 'presented' | 'accepted' | 'declined'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          client_id?: string | null
+          dream_outcome?: string | null
+          likelihood_score?: number | null
+          time_to_result?: string | null
+          time_delay_score?: number | null
+          effort_required?: string | null
+          effort_score?: number | null
+          value_stack?: Json
+          proposed_price?: number | null
+          engines_active?: Json
+          notes?: string | null
+          status?: 'draft' | 'presented' | 'accepted' | 'declined'
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
@@ -1009,3 +1226,8 @@ export type RevenueEntryUpdate = UpdateTables<'revenue_entries'>
 export type MonthlyExpense = Tables<'monthly_expenses'>
 export type MonthlyExpenseInsert = InsertTables<'monthly_expenses'>
 export type MonthlyExpenseUpdate = UpdateTables<'monthly_expenses'>
+export type ContentItem = Tables<'content_items'>
+export type ContentIdea = Tables<'content_ideas'>
+export type Notification = Tables<'notifications'>
+export type ClientEngine = Tables<'client_engines'>
+export type GrandSlamWorksheet = Tables<'grand_slam_worksheets'>

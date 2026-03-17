@@ -10,7 +10,7 @@ export default function DashboardLayout({
     <AdminPasswordGate>
       <div className="flex h-screen">
         <Sidebar />
-        <main className="flex-1 overflow-auto bg-gray-50">
+        <main className="flex-1 overflow-auto bg-[var(--bg)]">
           <div className="container mx-auto px-6 py-8">
             {children}
           </div>

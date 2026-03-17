@@ -56,14 +56,14 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
   // Not logged in — show unified login
   if (!loggedInUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 via-blue-900 to-gray-900">
+      <div className="min-h-screen flex items-center justify-center bg-[#0A0A0A]">
         <div className="max-w-sm w-full mx-4">
-          <div className="bg-white rounded-2xl shadow-2xl p-8 text-center">
+          <div className="bg-[#141414] border border-[#262626] rounded-2xl p-8 text-center">
             <div className="mb-4">
               <Image src={sweetDreamsLogo} alt="Sweet Dreams" height={48} className="w-auto mx-auto" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 mb-1">Partnership Tracker</h1>
-            <p className="text-sm text-gray-500 mb-6">Sweet Dreams Media</p>
+            <h1 className="text-2xl font-bold text-white mb-1">Grand Slam Tracker</h1>
+            <p className="text-sm text-gray-500 mb-6">Sweet Dreams US</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="text"
@@ -71,19 +71,19 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
                 onChange={(e) => { setUsername(e.target.value); setError('') }}
                 placeholder="Username"
                 autoFocus
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-[#262626] bg-[#0A0A0A] text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F4C430] focus:border-[#F4C430] placeholder:text-gray-600"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
                 placeholder="Password"
-                className="w-full border border-gray-300 rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                className="w-full border border-[#262626] bg-[#0A0A0A] text-white rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-[#F4C430] focus:border-[#F4C430] placeholder:text-gray-600"
               />
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-red-400">{error}</p>}
               <button
                 type="submit"
-                className="w-full bg-blue-600 text-white rounded-lg px-4 py-3 text-sm font-medium hover:bg-blue-700 transition-colors"
+                className="w-full bg-[#F4C430] text-black rounded-lg px-4 py-3 text-sm font-bold hover:bg-[#E5B72B] transition-colors"
               >
                 Sign In
               </button>
@@ -159,7 +159,7 @@ export default function AdminPasswordGate({ children }: { children: React.ReactN
     <>
       <button
         onClick={handleLogout}
-        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors shadow-sm"
+        className="fixed bottom-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-[#1A1A1A] text-gray-400 hover:bg-[#262626] hover:text-white transition-colors border border-[#262626]"
       >
         <LogOut className="h-3.5 w-3.5" />
         Sign Out

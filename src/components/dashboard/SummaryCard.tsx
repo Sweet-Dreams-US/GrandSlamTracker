@@ -44,24 +44,24 @@ export default function SummaryCard({
 
   const getTrendColor = () => {
     if (change === undefined) return ''
-    if (change > 0) return 'text-green-600'
-    if (change < 0) return 'text-red-600'
+    if (change > 0) return 'text-green-400'
+    if (change < 0) return 'text-red-400'
     return 'text-gray-500'
   }
 
   return (
-    <div className="stat-card">
+    <div className="bg-[#141414] border border-[#262626] rounded-xl p-6 hover:border-[#333] transition-colors">
       <div className="flex items-center justify-between">
-        <p className="stat-card-title">{title}</p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider">{title}</p>
         {Icon && (
-          <div className="p-2 bg-primary-50 rounded-lg">
-            <Icon className="h-5 w-5 text-primary-600" />
+          <div className="p-2 bg-[#F4C430]/10 rounded-lg">
+            <Icon className="h-5 w-5 text-[#F4C430]" />
           </div>
         )}
       </div>
-      <p className="stat-card-value">{formatValue(value)}</p>
+      <p className="mt-2 text-3xl font-bold text-white">{formatValue(value)}</p>
       {change !== undefined && (
-        <div className={`stat-card-change ${getTrendColor()}`}>
+        <div className={`mt-2 flex items-center text-sm ${getTrendColor()}`}>
           {getTrendIcon()}
           <span className="ml-1">
             {change > 0 ? '+' : ''}{change.toFixed(1)}%
