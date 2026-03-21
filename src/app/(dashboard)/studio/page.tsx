@@ -118,24 +118,30 @@ export default function StudioOverview() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
             <div className="p-2 bg-amber-500/10 rounded-lg"><Clock className="h-5 w-5 text-amber-400" /></div>
-            <p className="text-sm font-medium text-gray-500">Sessions This Month</p>
+            <p className="text-sm font-medium text-gray-500">Sessions</p>
           </div>
           <p className="text-2xl font-bold text-white">{summary.sessionCount}</p>
         </div>
 
         <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
           <div className="flex items-center gap-3 mb-3">
-            <div className="p-2 bg-blue-500/10 rounded-lg"><DollarSign className="h-5 w-5 text-blue-400" /></div>
-            <p className="text-sm font-medium text-gray-500">Total Studio Revenue</p>
+            <div className="p-2 bg-blue-500/10 rounded-lg"><Music className="h-5 w-5 text-blue-400" /></div>
+            <p className="text-sm font-medium text-gray-500">Recording Revenue</p>
           </div>
           <p className="text-2xl font-bold text-white">${summary.totalStudioRevenue.toFixed(2)}</p>
-          {summary.totalMediaSales > 0 && (
-            <p className="text-xs text-gray-400 mt-1">+ ${summary.totalMediaSales.toFixed(2)} media sales</p>
-          )}
+        </div>
+
+        <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="p-2 bg-cyan-500/10 rounded-lg"><Building2 className="h-5 w-5 text-cyan-400" /></div>
+            <p className="text-sm font-medium text-gray-500">Media Sales</p>
+          </div>
+          <p className="text-2xl font-bold text-cyan-400">${summary.totalMediaSales.toFixed(2)}</p>
+          <p className="text-xs text-gray-400 mt-1">{studioMediaSales.length} sale{studioMediaSales.length !== 1 ? 's' : ''}</p>
         </div>
 
         <div className="bg-[#141414] rounded-xl border border-[#262626] p-5">
@@ -189,13 +195,21 @@ export default function StudioOverview() {
         </div>
       )}
 
-      {/* Studio Media Sales */}
-      {studioMediaSales.length > 0 && (
-        <div className="bg-[#141414] rounded-xl border border-[#262626] mb-8">
-          <div className="px-6 py-4 border-b border-[#262626] flex items-center gap-2">
-            <Building2 className="h-5 w-5 text-gray-400" />
+      {/* Studio Media Sales — content jobs for music clients */}
+      <div className="bg-[#141414] rounded-xl border border-[#262626] mb-8">
+        <div className="px-6 py-4 border-b border-[#262626] flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-5 w-5 text-cyan-400" />
             <h2 className="text-lg font-semibold text-white">Media Sales</h2>
+            <span className="text-xs text-gray-500 ml-2">Content jobs for music clients</span>
           </div>
+          {studioMediaSales.length > 0 && (
+            <span className="text-sm font-bold text-cyan-400">${summary.totalMediaSales.toFixed(2)} total</span>
+          )}
+        </div>
+        {studioMediaSales.length === 0 ? (
+          <div className="text-center py-8 text-gray-500 text-sm">No media sales this month</div>
+        ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-[#0A0A0A] text-gray-500 text-xs uppercase">
@@ -204,6 +218,8 @@ export default function StudioOverview() {
                   <th className="text-left px-6 py-3">Client</th>
                   <th className="text-left px-6 py-3">Description</th>
                   <th className="text-left px-6 py-3">Sold By</th>
+                  <th className="text-left px-6 py-3">Filmed By</th>
+                  <th className="text-left px-6 py-3">Edited By</th>
                   <th className="text-right px-6 py-3">Amount</th>
                 </tr>
               </thead>
@@ -213,15 +229,17 @@ export default function StudioOverview() {
                     <td className="px-6 py-3 text-gray-300">{new Date(sale.date).toLocaleDateString()}</td>
                     <td className="px-6 py-3 text-white font-medium">{sale.client}</td>
                     <td className="px-6 py-3 text-gray-300">{sale.description}</td>
-                    <td className="px-6 py-3 text-gray-300">{sale.sold_by}</td>
-                    <td className="px-6 py-3 text-right text-white font-medium">${sale.amount.toFixed(2)}</td>
+                    <td className="px-6 py-3 text-gray-300">{sale.sold_by || '—'}</td>
+                    <td className="px-6 py-3 text-gray-300">{sale.filmed_by || '—'}</td>
+                    <td className="px-6 py-3 text-gray-300">{sale.edited_by || '—'}</td>
+                    <td className="px-6 py-3 text-right text-cyan-400 font-medium">${sale.amount.toFixed(2)}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {/* Recent Sessions */}
       <div className="bg-[#141414] rounded-xl border border-[#262626]">

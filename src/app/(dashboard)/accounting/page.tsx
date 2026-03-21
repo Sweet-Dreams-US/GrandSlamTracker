@@ -53,11 +53,12 @@ export default function AccountingDashboard() {
         (supabase.from('payout_records') as any).select('*').gte('date', monthStart.split('T')[0]).order('date', { ascending: false }),
         (supabase.from('expenses') as any).select('*').gte('date', monthStart),
         (supabase.from('invoices') as any).select('*'),
-        fetch(`/api/studio-revenue?start=${encodeURIComponent(monthStart)}&end=${encodeURIComponent(monthEnd)}`).then(r => r.json()).catch(() => ({ sessions: [] })),
+        fetch(`/api/studio-revenue?start=${encodeURIComponent(monthStart)}&end=${encodeURIComponent(monthEnd)}`).then(r => r.json()).catch(() => ({ sessions: [], studioMediaSales: [] })),
       ])
 
       if (payoutRes.data) setMediaProjects(payoutRes.data)
       if (studioApiRes.sessions) setStudioSessions(studioApiRes.sessions)
+      if (studioApiRes.studioMediaSales) setBeatSales(studioApiRes.studioMediaSales) // Studio media sales (content for music clients)
       if (expRes.data) setExpenses(expRes.data)
       if (invRes.data) setInvoices(invRes.data)
       setLoading(false)
@@ -68,7 +69,7 @@ export default function AccountingDashboard() {
   // MTD Calculations
   const mediaRevenue = mediaProjects.reduce((s, p) => s + Number(p.total_revenue || 0), 0)
   const studioRevenue = studioSessions.reduce((s, p) => s + Number(p.billed || 0), 0)
-  const beatRevenue = beatSales.reduce((s, p) => s + Number(p.price || 0), 0)
+  const beatRevenue = beatSales.reduce((s, p) => s + Number(p.amount || p.price || 0), 0)
   const totalRevenue = mediaRevenue + studioRevenue + beatRevenue
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount || 0), 0)
   const netIncome = totalRevenue - totalExpenses
@@ -104,9 +105,9 @@ export default function AccountingDashboard() {
     })),
     ...beatSales.map((b: any) => ({
       id: `b-${b.id}`,
-      date: b.date,
-      description: `Beat: ${b.title || 'Untitled'}`,
-      amount: Number(b.price || 0),
+      date: b.date || b.created_at,
+      description: `Media Sale: ${b.client || b.title || 'Untitled'} — ${b.description || ''}`,
+      amount: Number(b.amount || b.price || 0),
       type: 'revenue' as const,
       stream: 'beats',
     })),
@@ -217,7 +218,7 @@ export default function AccountingDashboard() {
             {[
               { label: 'Media Projects', value: mediaRevenue, icon: Film, color: 'var(--accent)' },
               { label: 'Studio Sessions', value: studioRevenue, icon: Mic2, color: 'var(--info)' },
-              { label: 'Beat Sales', value: beatRevenue, icon: Music, color: 'var(--success)' },
+              { label: 'Studio Media Sales', value: beatRevenue, icon: Music, color: 'var(--success)' },
             ].map((stream) => (
               <div key={stream.label}>
                 <div className="flex items-center justify-between mb-2">
