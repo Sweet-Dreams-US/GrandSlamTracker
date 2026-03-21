@@ -26,6 +26,7 @@ interface PayoutRecord {
   date: string
   client_name: string
   total_revenue: number
+  business_amount: number
   worker_amount: number
   sales_amount: number
   calculation_details: any
@@ -164,17 +165,25 @@ export default function TaxPage() {
     fetchData()
   }
 
-  const initAnnualDoc = async (formType: string) => {
-    const dueDate = formType.includes('form_103') ? `${selectedYear + 1}-05-15` : `${selectedYear + 1}-03-15`
-    await supabase.from('annual_tax_filings').upsert({
-      tax_year: selectedYear,
-      form_type: formType,
-      due_date: dueDate,
-      form_data: {},
-      status: 'not_started',
-    }, { onConflict: 'tax_year,form_type' })
-    fetchData()
+  // Generate 1099-NEC data for a contractor
+  function generate1099Data(person: typeof teamWithPayouts[0]) {
+    return {
+      payerName: 'Sweet Dreams US LLC',
+      payerEIN: '', // Fill from Xero / settings
+      recipientName: person.name,
+      recipientTIN: '', // From W-9 on file
+      box1_nonemployeeComp: person.payouts.total,
+      taxYear: selectedYear,
+    }
   }
+
+  // Total business revenue for partnership return
+  const totalMediaRevenue = payoutRecords.reduce((s, p) => s + Number(p.total_revenue || 0), 0)
+  const totalBusinessRetention = payoutRecords.reduce((s, p) => s + Number(p.business_amount || 0), 0)
+  const totalWorkerPayouts = payoutRecords.reduce((s, p) => s + Number(p.worker_amount || 0), 0)
+  const totalSalesPayouts = payoutRecords.reduce((s, p) => s + Number(p.sales_amount || 0), 0)
+  const studioTotalRevenue = studioData?.summary?.totalStudioRevenue || 0
+  const studioBusinessRetention = studioData?.summary?.totalBusinessRetention || 0
 
   const totalSalesTaxDue = salesTax.reduce((s, t) => s + (t.net_tax_due || 0), 0)
   const totalSalesTaxPaid = salesTax.filter(t => t.filing_status === 'paid').reduce((s, t) => s + (t.net_tax_due || 0), 0)
@@ -510,50 +519,211 @@ export default function TaxPage() {
 
           {/* Annual Filings Tab */}
           {tab === 'annual' && (
-            <div className="space-y-4">
-              <p className="text-sm" style={{ color: 'var(--muted)' }}>Track preparation and filing status for all annual tax documents. Click &quot;Initialize&quot; to start tracking a form.</p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {[
-                  { type: 'form_1065', name: 'Form 1065', desc: 'Federal Partnership Return', due: 'March 15' },
-                  { type: 'schedule_k1_jay', name: 'Schedule K-1 (Jay)', desc: 'Partner Distributive Share', due: 'March 15' },
-                  { type: 'schedule_k1_cole', name: 'Schedule K-1 (Cole)', desc: 'Partner Distributive Share', due: 'March 15' },
-                  { type: 'it_65', name: 'Indiana IT-65', desc: 'State Partnership Return', due: 'March 15' },
-                  { type: 'form_103', name: 'Form 103', desc: 'Business Property Tax', due: 'May 15' },
-                  { type: '1099_nec_checklist', name: '1099-NEC', desc: 'Contractor Reporting', due: 'January 31' },
-                ].map(form => {
-                  const existing = annualTax.find(a => a.form_type === form.type)
-                  return (
-                    <div key={form.type} className="card p-6">
-                      <div className="flex items-start justify-between mb-3">
-                        <div>
-                          <h4 className="font-bold" style={{ color: 'var(--foreground)' }}>{form.name}</h4>
-                          <p className="text-xs" style={{ color: 'var(--muted)' }}>{form.desc}</p>
+            <div className="space-y-6">
+              <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                Auto-generated tax form data from your payout records. Review the pre-filled numbers, then file with the IRS/state.
+              </p>
+
+              {/* 1099-NEC Forms — Auto-generated per contractor */}
+              <div className="card">
+                <div className="p-4 border-b border-[var(--border)] flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>1099-NEC Forms</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Due January 31 — File for each contractor paid ≥ $2,000</p>
+                  </div>
+                  <span className="badge badge-danger">{contractors1099} to file</span>
+                </div>
+                <div className="divide-y divide-[var(--border)]">
+                  {teamWithPayouts.filter(t => t.role !== 'owner' && t.payouts.total > 0).map(person => {
+                    const data = generate1099Data(person)
+                    return (
+                      <div key={person.id} className="p-5">
+                        <div className="flex items-start justify-between mb-4">
+                          <div>
+                            <h4 className="font-bold" style={{ color: 'var(--foreground)' }}>1099-NEC — {person.name}</h4>
+                            <div className="flex items-center gap-2 mt-1">
+                              {person.needs1099 ? (
+                                <span className="badge badge-danger">Required</span>
+                              ) : (
+                                <span className="badge badge-gray">Below threshold</span>
+                              )}
+                              {person.tax_status === 'w9_received' || person.documents_received?.includes('W-9') ? (
+                                <span className="badge badge-success">W-9 on file</span>
+                              ) : (
+                                <span className="badge badge-warning">W-9 missing</span>
+                              )}
+                            </div>
+                          </div>
+                          <p className="text-xl font-bold" style={{ color: 'var(--accent)' }}>{fmt(person.payouts.total)}</p>
                         </div>
-                        {existing ? (
-                          <span className={`badge ${
-                            existing.status === 'filed' ? 'badge-success' :
-                            existing.status === 'reviewed' ? 'badge-info' :
-                            existing.status === 'prepared' ? 'badge-warning' :
-                            existing.status === 'in_progress' ? 'badge-warning' : 'badge-gray'
-                          }`}>{existing.status.replace('_', ' ')}</span>
-                        ) : (
-                          <button onClick={() => initAnnualDoc(form.type)} className="btn btn-secondary btn-sm">Initialize</button>
-                        )}
-                      </div>
-                      <div className="text-xs space-y-1" style={{ color: 'var(--muted)' }}>
-                        <div className="flex justify-between"><span>Due</span><span>{form.due}</span></div>
-                        {existing && existing.filed_date && <div className="flex justify-between"><span>Filed</span><span className="text-[var(--success)]">{existing.filed_date}</span></div>}
-                        {existing && existing.extension_filed && <div className="flex justify-between"><span>Extended to</span><span>{existing.extended_due_date}</span></div>}
-                      </div>
-                      {existing && (
-                        <div className="mt-3 flex gap-2">
-                          {existing.reviewed_by_jay && <span className="badge badge-success text-xs">Jay ✓</span>}
-                          {existing.reviewed_by_cole && <span className="badge badge-success text-xs">Cole ✓</span>}
+                        <div className="rounded-lg p-4 text-sm font-mono" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                          <div className="grid grid-cols-2 gap-x-8 gap-y-2">
+                            <div>
+                              <span className="text-xs uppercase" style={{ color: 'var(--muted)' }}>Payer</span>
+                              <p style={{ color: 'var(--foreground)' }}>Sweet Dreams US LLC</p>
+                            </div>
+                            <div>
+                              <span className="text-xs uppercase" style={{ color: 'var(--muted)' }}>Payer TIN</span>
+                              <p style={{ color: 'var(--muted)' }}>Set in Settings</p>
+                            </div>
+                            <div>
+                              <span className="text-xs uppercase" style={{ color: 'var(--muted)' }}>Recipient</span>
+                              <p style={{ color: 'var(--foreground)' }}>{person.name}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs uppercase" style={{ color: 'var(--muted)' }}>Recipient TIN</span>
+                              <p style={{ color: person.tax_status === 'w9_received' ? 'var(--foreground)' : 'var(--danger)' }}>
+                                {person.tax_status === 'w9_received' ? 'From W-9' : 'Need W-9'}
+                              </p>
+                            </div>
+                            <div className="col-span-2 mt-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                              <span className="text-xs uppercase" style={{ color: 'var(--muted)' }}>Box 1 — Nonemployee Compensation</span>
+                              <p className="text-lg font-bold" style={{ color: 'var(--foreground)' }}>{fmt(person.payouts.total)}</p>
+                              <div className="flex gap-4 mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                                {person.payouts.media_worker > 0 && <span>Media work: {fmt(person.payouts.media_worker)}</span>}
+                                {person.payouts.media_sales > 0 && <span>Sales comm: {fmt(person.payouts.media_sales)}</span>}
+                                {person.payouts.studio > 0 && <span>Studio eng: {fmt(person.payouts.studio)}</span>}
+                              </div>
+                            </div>
+                          </div>
                         </div>
-                      )}
+                      </div>
+                    )
+                  })}
+                  {teamWithPayouts.filter(t => t.role !== 'owner' && t.payouts.total > 0).length === 0 && (
+                    <div className="p-8 text-center" style={{ color: 'var(--muted)' }}>No contractor payouts for {selectedYear}</div>
+                  )}
+                </div>
+              </div>
+
+              {/* Form 1065 — Partnership Return Summary */}
+              <div className="card">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Form 1065 — Partnership Return Data</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Due March 15 — Key line items auto-calculated from your records</p>
+                </div>
+                <div className="p-5">
+                  <div className="rounded-lg p-5 font-mono text-sm space-y-3" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                    <div className="text-xs font-bold uppercase tracking-wider pb-2 mb-2" style={{ color: 'var(--accent)', borderBottom: '1px solid var(--border)' }}>
+                      Income
                     </div>
-                  )
-                })}
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>Line 1a — Gross receipts (Media)</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(totalMediaRevenue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>Line 1a — Gross receipts (Studio)</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(studioTotalRevenue)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold pt-1" style={{ borderTop: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--foreground)' }}>Total Gross Receipts</span>
+                      <span style={{ color: 'var(--accent)' }}>{fmt(totalMediaRevenue + studioTotalRevenue)}</span>
+                    </div>
+
+                    <div className="text-xs font-bold uppercase tracking-wider pb-2 mb-2 mt-4" style={{ color: 'var(--accent)', borderBottom: '1px solid var(--border)' }}>
+                      Deductions
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>Line 10 — Guaranteed payments (Worker payouts)</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(totalWorkerPayouts)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>Line 10 — Guaranteed payments (Sales commissions)</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(totalSalesPayouts)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>Contractor payments (Studio engineers)</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(studioData?.summary?.totalEngineerPayouts || 0)}</span>
+                    </div>
+
+                    <div className="text-xs font-bold uppercase tracking-wider pb-2 mb-2 mt-4" style={{ color: 'var(--accent)', borderBottom: '1px solid var(--border)' }}>
+                      Bottom Line
+                    </div>
+                    <div className="flex justify-between font-bold">
+                      <span style={{ color: 'var(--foreground)' }}>Ordinary Business Income (est.)</span>
+                      <span style={{ color: 'var(--success)' }}>{fmt(totalBusinessRetention + studioBusinessRetention)}</span>
+                    </div>
+                    <p className="text-xs mt-2" style={{ color: 'var(--muted)' }}>
+                      Note: This is a simplified view. Actual 1065 requires expenses from Xero. Connect Xero to auto-populate remaining deductions.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Schedule K-1 — Per Partner */}
+              <div className="card">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Schedule K-1 — Partner Shares</h3>
+                  <p className="text-xs mt-0.5" style={{ color: 'var(--muted)' }}>Due March 15 — Each partner&apos;s distributive share</p>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-5">
+                  {teamWithPayouts.filter(t => t.role === 'owner').map(owner => {
+                    const ownerPayouts = personPayouts[owner.name] || { media_worker: 0, media_sales: 0, studio: 0, total: 0 }
+                    const businessShare = (totalBusinessRetention + studioBusinessRetention) * 0.5 // 50/50 partnership
+                    return (
+                      <div key={owner.id} className="rounded-lg p-5 font-mono text-sm" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        <h4 className="font-bold mb-3" style={{ color: 'var(--foreground)' }}>K-1 — {owner.name}</h4>
+                        <div className="space-y-2">
+                          <div className="flex justify-between">
+                            <span style={{ color: 'var(--muted)' }}>Box 1 — Ordinary income (50%)</span>
+                            <span style={{ color: 'var(--foreground)' }}>{fmt(businessShare)}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span style={{ color: 'var(--muted)' }}>Box 4 — Guaranteed payments</span>
+                            <span style={{ color: 'var(--foreground)' }}>{fmt(ownerPayouts.total)}</span>
+                          </div>
+                          <div className="flex justify-between pt-2 font-bold" style={{ borderTop: '1px solid var(--border)' }}>
+                            <span style={{ color: 'var(--foreground)' }}>Total K-1 income</span>
+                            <span style={{ color: 'var(--accent)' }}>{fmt(businessShare + ownerPayouts.total)}</span>
+                          </div>
+                          <div className="flex gap-3 mt-2 text-xs" style={{ color: 'var(--muted)' }}>
+                            <span>Worker: {fmt(ownerPayouts.media_worker)}</span>
+                            <span>Sales: {fmt(ownerPayouts.media_sales)}</span>
+                            <span>Studio: {fmt(ownerPayouts.studio)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Indiana IT-65 + Form 103 */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="card p-6">
+                  <h4 className="font-bold mb-1" style={{ color: 'var(--foreground)' }}>Indiana IT-65</h4>
+                  <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>State Partnership Return — Due March 15</p>
+                  <div className="rounded-lg p-4 font-mono text-sm" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                    <div className="flex justify-between mb-2">
+                      <span style={{ color: 'var(--muted)' }}>Total partnership income</span>
+                      <span style={{ color: 'var(--foreground)' }}>{fmt(totalBusinessRetention + studioBusinessRetention)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span style={{ color: 'var(--muted)' }}>IN tax rate</span>
+                      <span style={{ color: 'var(--foreground)' }}>3.05%</span>
+                    </div>
+                    <div className="flex justify-between pt-2 mt-2 font-bold" style={{ borderTop: '1px solid var(--border)' }}>
+                      <span style={{ color: 'var(--foreground)' }}>Estimated IN tax</span>
+                      <span style={{ color: 'var(--accent)' }}>{fmt((totalBusinessRetention + studioBusinessRetention) * 0.0305)}</span>
+                    </div>
+                  </div>
+                  <p className="text-xs mt-3" style={{ color: 'var(--muted)' }}>Pass-through: each partner reports their share on personal IN return.</p>
+                </div>
+
+                <div className="card p-6">
+                  <h4 className="font-bold mb-1" style={{ color: 'var(--foreground)' }}>Form 103</h4>
+                  <p className="text-xs mb-4" style={{ color: 'var(--muted)' }}>Business Personal Property — Due May 15</p>
+                  <div className="rounded-lg p-4 text-sm" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                    <p style={{ color: 'var(--muted)' }}>
+                      List all business equipment (cameras, computers, studio gear, furniture) with acquisition date and cost.
+                      Property is assessed at a percentage of cost based on age.
+                    </p>
+                    <div className="mt-3 pt-3" style={{ borderTop: '1px solid var(--border)' }}>
+                      <p className="text-xs font-medium" style={{ color: 'var(--foreground)' }}>Connect Xero for automatic asset tracking</p>
+                      <p className="text-xs" style={{ color: 'var(--muted)' }}>Fixed assets from Xero will auto-populate here</p>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           )}
