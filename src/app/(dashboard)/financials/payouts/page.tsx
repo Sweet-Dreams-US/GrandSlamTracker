@@ -239,6 +239,19 @@ export default function PayoutsPage() {
     date: new Date().toISOString().split('T')[0],
   })
   const [savingTxn, setSavingTxn] = useState(false)
+  const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<string | null>(null)
+  const [deletingRecord, setDeletingRecord] = useState<string | null>(null)
+
+  async function handleDeleteRecord(id: string) {
+    setDeletingRecord(id)
+    const supabase = createSupabaseBrowserClient()
+    const { error } = await (supabase.from('payout_records') as any).delete().eq('id', id)
+    if (!error) {
+      setRecords((prev) => prev.filter((r) => r.id !== id))
+    }
+    setDeletingRecord(null)
+    setConfirmDeleteRecord(null)
+  }
 
   useEffect(() => {
     loadRecords()
@@ -884,12 +897,12 @@ export default function PayoutsPage() {
         </div>
       </div>
 
-      {/* Section 3: Saved Records Table */}
-      <div className="card p-6">
+      {/* Section 3: Saved Records */}
+      <div>
         <div className="flex items-center justify-between mb-4">
           <h2 className="section-title">Saved Payout Records</h2>
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-gray-400" />
+            <Filter className="h-4 w-4" style={{ color: 'var(--muted)' }} />
             <select
               className="input py-1 text-sm w-auto"
               value={filterDealType}
@@ -904,375 +917,308 @@ export default function PayoutsPage() {
         </div>
 
         {loading ? (
-          <p className="text-sm text-gray-400">Loading records...</p>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>Loading records...</p>
         ) : filteredRecords.length === 0 ? (
-          <p className="text-sm text-gray-400">No payout records yet.</p>
+          <p className="text-sm" style={{ color: 'var(--muted)' }}>No payout records yet.</p>
         ) : (
-          <div className="table-container">
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="w-8"></th>
-                  <th>Date</th>
-                  <th>Deal Type</th>
-                  <th>Client</th>
-                  <th className="text-right">Total</th>
-                  <th className="text-right">Business</th>
-                  <th className="text-right">Sales</th>
-                  <th className="text-right">Worker</th>
-                  <th>People</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredRecords.map((r) => {
-                  const isExpanded = expandedRecordId === r.id
+          <div className="space-y-3">
+            {filteredRecords.map((r) => {
+              const isExpanded = expandedRecordId === r.id
+              const details = r.calculation_details as Record<string, unknown> | null
+              const savedSalesBreakdown = (details?.salesBreakdown as { name: string; percent: number; amount: number }[]) ?? []
+              const savedWorkerBreakdown = (details?.workerBreakdown as { name: string; percent: number; amount: number }[]) ?? []
 
-                  // Compute ledger balances when expanded
-                  const totalDeposits = isExpanded
-                    ? transactions.filter(t => t.transaction_type === 'deposit_received').reduce((s, t) => s + Number(t.amount), 0)
-                    : 0
-                  const totalPaidBusiness = isExpanded
-                    ? transactions.filter(t => t.transaction_type === 'payment_to_business').reduce((s, t) => s + Number(t.amount), 0)
-                    : 0
-                  const totalPaidSales = isExpanded
-                    ? transactions.filter(t => t.transaction_type === 'payment_to_sales').reduce((s, t) => s + Number(t.amount), 0)
-                    : 0
-                  const totalPaidWorker = isExpanded
-                    ? transactions.filter(t => t.transaction_type === 'payment_to_worker').reduce((s, t) => s + Number(t.amount), 0)
-                    : 0
-                  const totalPaidOut = totalPaidBusiness + totalPaidSales + totalPaidWorker
-                  const stillOwed = r.total_revenue - totalDeposits
-                  const cashOnHand = totalDeposits - totalPaidOut
-
-                  // Parse per-person details from calculation_details
-                  const details = r.calculation_details as Record<string, unknown> | null
-                  const savedSalesBreakdown = (details?.salesBreakdown as { name: string; percent: number; amount: number }[]) ?? []
-                  const savedWorkerBreakdown = (details?.workerBreakdown as { name: string; percent: number; amount: number }[]) ?? []
-
-                  // Per-person paid amounts
-                  const paidByRecipient: Record<string, number> = {}
-                  if (isExpanded) {
-                    for (const t of transactions) {
-                      if (t.transaction_type !== 'deposit_received' && t.recipient) {
-                        paidByRecipient[t.recipient] = (paidByRecipient[t.recipient] || 0) + Number(t.amount)
-                      }
-                    }
+              // Compute ledger balances when expanded
+              const totalDeposits = isExpanded
+                ? transactions.filter(t => t.transaction_type === 'deposit_received').reduce((s, t) => s + Number(t.amount), 0)
+                : 0
+              const totalPaidBusiness = isExpanded
+                ? transactions.filter(t => t.transaction_type === 'payment_to_business').reduce((s, t) => s + Number(t.amount), 0)
+                : 0
+              const totalPaidSales = isExpanded
+                ? transactions.filter(t => t.transaction_type === 'payment_to_sales').reduce((s, t) => s + Number(t.amount), 0)
+                : 0
+              const totalPaidWorker = isExpanded
+                ? transactions.filter(t => t.transaction_type === 'payment_to_worker').reduce((s, t) => s + Number(t.amount), 0)
+                : 0
+              const totalPaidOut = totalPaidBusiness + totalPaidSales + totalPaidWorker
+              const stillOwed = r.total_revenue - totalDeposits
+              const cashOnHand = totalDeposits - totalPaidOut
+              const paidByRecipient: Record<string, number> = {}
+              if (isExpanded) {
+                for (const t of transactions) {
+                  if (t.transaction_type !== 'deposit_received' && t.recipient) {
+                    paidByRecipient[t.recipient] = (paidByRecipient[t.recipient] || 0) + Number(t.amount)
                   }
+                }
+              }
 
-                  return (
-                    <React.Fragment key={r.id}>
-                      <tr
-                        className="cursor-pointer hover:bg-gray-50"
-                        onClick={() => toggleExpandRecord(r.id)}
-                      >
-                        <td className="w-8">
+              return (
+                <div key={r.id} className="card overflow-hidden">
+                  {/* Card Header */}
+                  <div
+                    className="p-4 cursor-pointer transition-colors"
+                    style={{ backgroundColor: isExpanded ? 'var(--surface-hover)' : undefined }}
+                    onClick={() => toggleExpandRecord(r.id)}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start gap-3 min-w-0 flex-1">
+                        <div className="pt-0.5">
                           {isExpanded
-                            ? <ChevronDown className="h-4 w-4 text-gray-400" />
-                            : <ChevronRight className="h-4 w-4 text-gray-400" />
+                            ? <ChevronDown className="h-4 w-4" style={{ color: 'var(--muted)' }} />
+                            : <ChevronRight className="h-4 w-4" style={{ color: 'var(--muted)' }} />
                           }
-                        </td>
-                        <td className="whitespace-nowrap">{r.date}</td>
-                        <td>
-                          <span className="badge badge-info text-xs">
-                            {DEAL_TYPES[r.deal_type as DealType]?.label ?? r.deal_type}
-                          </span>
-                        </td>
-                        <td>{r.client_name}</td>
-                        <td className="text-right font-medium">{fmt(r.total_revenue)}</td>
-                        <td className="text-right">{fmt(r.business_amount)}</td>
-                        <td className="text-right text-green-700">{fmt(r.sales_amount)}</td>
-                        <td className="text-right text-blue-700">{fmt(r.worker_amount)}</td>
-                        <td className="text-xs text-gray-500 max-w-[200px] truncate">
-                          {r.sales_person && <div className="text-green-600">S: {r.sales_person}</div>}
-                          {r.worker_person && <div className="text-blue-600">W: {r.worker_person}</div>}
-                        </td>
-                      </tr>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold" style={{ color: 'var(--foreground)' }}>
+                              {r.client_name}
+                            </h4>
+                            <span className="badge-info text-xs">
+                              {DEAL_TYPES[r.deal_type as DealType]?.label ?? r.deal_type}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                            <span>{r.date}</span>
+                            {r.worker_person && <span>Workers: {r.worker_person}</span>}
+                            {r.sales_person && <span>Sales: {r.sales_person}</span>}
+                            {r.notes && <span>{r.notes}</span>}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4 flex-shrink-0">
+                        <div className="text-right">
+                          <p className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>{fmt(r.total_revenue)}</p>
+                          <div className="flex items-center gap-2 mt-0.5 text-xs justify-end">
+                            <span style={{ color: 'var(--success)' }}>B {fmt(r.business_amount)}</span>
+                            {r.sales_amount > 0 && <span style={{ color: 'var(--accent)' }}>S {fmt(r.sales_amount)}</span>}
+                            <span style={{ color: 'var(--warning)' }}>W {fmt(r.worker_amount)}</span>
+                          </div>
+                        </div>
+                        {/* Delete Button */}
+                        <div onClick={(e) => e.stopPropagation()}>
+                          {confirmDeleteRecord === r.id ? (
+                            <div className="flex flex-col gap-1">
+                              <button
+                                className="text-xs px-3 py-1.5 rounded font-medium"
+                                style={{ backgroundColor: 'var(--danger)', color: 'white' }}
+                                onClick={() => handleDeleteRecord(r.id)}
+                                disabled={deletingRecord === r.id}
+                              >
+                                {deletingRecord === r.id ? '...' : 'Delete'}
+                              </button>
+                              <button
+                                className="text-xs px-3 py-1 rounded"
+                                style={{ color: 'var(--muted)' }}
+                                onClick={() => setConfirmDeleteRecord(null)}
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              className="p-2 rounded-lg transition-colors"
+                              style={{ color: 'var(--danger)', backgroundColor: 'transparent' }}
+                              onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)')}
+                              onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                              onClick={() => setConfirmDeleteRecord(r.id)}
+                              title="Delete this record"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
 
-                      {isExpanded && (
-                        <tr>
-                          <td colSpan={9} className="p-0">
-                            <div className="bg-gray-50 border-t border-b border-gray-200 p-5 space-y-5">
+                  {/* Expanded Detail */}
+                  {isExpanded && (
+                    <div className="p-4 space-y-4" style={{ borderTop: '1px solid var(--border)' }}>
+                      {/* Balance Summary */}
+                      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                        <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                          <div className="text-[10px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Job Value</div>
+                          <div className="text-lg font-bold" style={{ color: 'var(--foreground)' }}>{fmt(r.total_revenue)}</div>
+                        </div>
+                        <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                          <div className="text-[10px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Deposits</div>
+                          <div className="text-lg font-bold" style={{ color: totalDeposits >= r.total_revenue ? 'var(--success)' : 'var(--warning)' }}>
+                            {fmt(totalDeposits)}
+                          </div>
+                          {stillOwed > 0.01 && <div className="text-[10px] mt-0.5" style={{ color: 'var(--danger)' }}>Owed: {fmt(stillOwed)}</div>}
+                        </div>
+                        <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                          <div className="text-[10px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Paid Out</div>
+                          <div className="text-lg font-bold" style={{ color: 'var(--foreground)' }}>{fmt(totalPaidOut)}</div>
+                        </div>
+                        <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                          <div className="text-[10px] uppercase font-semibold" style={{ color: 'var(--muted)' }}>Cash on Hand</div>
+                          <div className="text-lg font-bold" style={{ color: cashOnHand < 0 ? 'var(--danger)' : 'var(--success)' }}>
+                            {fmt(cashOnHand)}
+                          </div>
+                        </div>
+                      </div>
 
-                              {/* Balance Summary */}
-                              <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                <div className="bg-white rounded-lg p-3 shadow-sm">
-                                  <div className="text-[10px] uppercase text-gray-400 font-semibold">Total Job Value</div>
-                                  <div className="text-lg font-bold text-gray-900">{fmt(r.total_revenue)}</div>
+                      {/* Payout Breakdown */}
+                      <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--background)' }}>
+                        <h4 className="text-xs font-semibold uppercase mb-3" style={{ color: 'var(--muted)' }}>Payout Breakdown</h4>
+                        <div className="space-y-2">
+                          {/* Business */}
+                          {(() => {
+                            const remaining = round2(r.business_amount - totalPaidBusiness)
+                            const done = remaining <= 0.01
+                            return (
+                              <div className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: 'var(--foreground)' }}>Business</span>
+                                  <span className="badge-gray text-xs">Business</span>
                                 </div>
-                                <div className="bg-white rounded-lg p-3 shadow-sm">
-                                  <div className="text-[10px] uppercase text-gray-400 font-semibold">Deposits Received</div>
-                                  <div className={`text-lg font-bold ${totalDeposits >= r.total_revenue ? 'text-green-600' : 'text-amber-600'}`}>
-                                    {fmt(totalDeposits)}
-                                  </div>
-                                  {stillOwed > 0.01 && (
-                                    <div className="text-[10px] text-red-500 mt-0.5">Still owed: {fmt(stillOwed)}</div>
-                                  )}
-                                </div>
-                                <div className="bg-white rounded-lg p-3 shadow-sm">
-                                  <div className="text-[10px] uppercase text-gray-400 font-semibold">Total Paid Out</div>
-                                  <div className="text-lg font-bold text-gray-700">{fmt(totalPaidOut)}</div>
-                                </div>
-                                <div className="bg-white rounded-lg p-3 shadow-sm">
-                                  <div className="text-[10px] uppercase text-gray-400 font-semibold">Cash on Hand</div>
-                                  <div className={`text-lg font-bold ${cashOnHand < 0 ? 'text-red-600' : 'text-green-600'}`}>
-                                    {fmt(cashOnHand)}
-                                  </div>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span style={{ color: 'var(--muted)' }}>Owed {fmt(r.business_amount)}</span>
+                                  <span className={done ? 'badge-success' : 'badge-danger'}>{done ? 'Paid' : fmt(remaining) + ' due'}</span>
                                 </div>
                               </div>
-
-                              {/* Payout Breakdown — everyone in one table */}
-                              <div className="bg-white rounded-lg p-4 shadow-sm">
-                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-3">Payout Breakdown</h4>
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className="text-left text-xs text-gray-500 border-b">
-                                      <th className="py-1.5">Who</th>
-                                      <th className="py-1.5">Role</th>
-                                      <th className="py-1.5 text-right">Owed</th>
-                                      <th className="py-1.5 text-right">Paid</th>
-                                      <th className="py-1.5 text-right">Remaining</th>
-                                      <th className="py-1.5 text-right">Status</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {/* Business row */}
-                                    {(() => {
-                                      const remaining = round2(r.business_amount - totalPaidBusiness)
-                                      const done = remaining <= 0.01
-                                      return (
-                                        <tr className="border-b border-gray-100">
-                                          <td className="py-1.5 font-medium">Business</td>
-                                          <td className="py-1.5"><span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600">Business</span></td>
-                                          <td className="py-1.5 text-right">{fmt(r.business_amount)}</td>
-                                          <td className="py-1.5 text-right">{fmt(totalPaidBusiness)}</td>
-                                          <td className={`py-1.5 text-right font-semibold ${done ? 'text-green-600' : 'text-red-600'}`}>
-                                            {done ? '$0.00' : fmt(remaining)}
-                                          </td>
-                                          <td className="py-1.5 text-right">
-                                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${done ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                                              {done ? 'Paid' : 'Due'}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      )
-                                    })()}
-                                    {/* Sales people rows */}
-                                    {savedSalesBreakdown.map((s, i) => {
-                                      const paid = paidByRecipient[s.name] || 0
-                                      const remaining = round2(s.amount - paid)
-                                      const done = remaining <= 0.01
-                                      return (
-                                        <tr key={`s-${i}`} className="border-b border-gray-100">
-                                          <td className="py-1.5 font-medium">{s.name}</td>
-                                          <td className="py-1.5"><span className="text-xs px-1.5 py-0.5 rounded bg-green-50 text-green-700">Sales ({s.percent}%)</span></td>
-                                          <td className="py-1.5 text-right">{fmt(s.amount)}</td>
-                                          <td className="py-1.5 text-right">{fmt(paid)}</td>
-                                          <td className={`py-1.5 text-right font-semibold ${done ? 'text-green-600' : 'text-red-600'}`}>
-                                            {done ? '$0.00' : fmt(remaining)}
-                                          </td>
-                                          <td className="py-1.5 text-right">
-                                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${done ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                                              {done ? 'Paid' : 'Due'}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      )
-                                    })}
-                                    {/* Worker rows */}
-                                    {savedWorkerBreakdown.map((w, i) => {
-                                      const paid = paidByRecipient[w.name] || 0
-                                      const remaining = round2(w.amount - paid)
-                                      const done = remaining <= 0.01
-                                      return (
-                                        <tr key={`w-${i}`} className="border-b border-gray-100">
-                                          <td className="py-1.5 font-medium">{w.name}</td>
-                                          <td className="py-1.5"><span className="text-xs px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">Worker ({w.percent}%)</span></td>
-                                          <td className="py-1.5 text-right">{fmt(w.amount)}</td>
-                                          <td className="py-1.5 text-right">{fmt(paid)}</td>
-                                          <td className={`py-1.5 text-right font-semibold ${done ? 'text-green-600' : 'text-red-600'}`}>
-                                            {done ? '$0.00' : fmt(remaining)}
-                                          </td>
-                                          <td className="py-1.5 text-right">
-                                            <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${done ? 'bg-green-100 text-green-700' : 'bg-red-50 text-red-600'}`}>
-                                              {done ? 'Paid' : 'Due'}
-                                            </span>
-                                          </td>
-                                        </tr>
-                                      )
-                                    })}
-                                  </tbody>
-                                  <tfoot>
-                                    <tr className="border-t-2 border-gray-300 font-semibold">
-                                      <td className="pt-2" colSpan={2}>Totals</td>
-                                      <td className="pt-2 text-right">{fmt(r.total_revenue)}</td>
-                                      <td className="pt-2 text-right">{fmt(totalPaidOut)}</td>
-                                      <td className={`pt-2 text-right ${r.total_revenue - totalPaidOut <= 0.01 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {fmt(round2(r.total_revenue - totalPaidOut))}
-                                      </td>
-                                      <td className="pt-2 text-right">
-                                        <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${r.total_revenue - totalPaidOut <= 0.01 ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                          {r.total_revenue - totalPaidOut <= 0.01 ? 'All Paid' : 'In Progress'}
-                                        </span>
-                                      </td>
-                                    </tr>
-                                  </tfoot>
-                                </table>
+                            )
+                          })()}
+                          {/* Sales */}
+                          {savedSalesBreakdown.map((s, i) => {
+                            const paid = paidByRecipient[s.name] || 0
+                            const remaining = round2(s.amount - paid)
+                            const done = remaining <= 0.01
+                            return (
+                              <div key={`s-${i}`} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: 'var(--foreground)' }}>{s.name}</span>
+                                  <span className="badge-success text-xs">Sales {s.percent}%</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span style={{ color: 'var(--muted)' }}>Owed {fmt(s.amount)}</span>
+                                  <span className={done ? 'badge-success' : 'badge-danger'}>{done ? 'Paid' : fmt(remaining) + ' due'}</span>
+                                </div>
                               </div>
+                            )
+                          })}
+                          {/* Workers */}
+                          {savedWorkerBreakdown.map((w, i) => {
+                            const paid = paidByRecipient[w.name] || 0
+                            const remaining = round2(w.amount - paid)
+                            const done = remaining <= 0.01
+                            return (
+                              <div key={`w-${i}`} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                                <div className="flex items-center gap-2">
+                                  <span className="font-medium" style={{ color: 'var(--foreground)' }}>{w.name}</span>
+                                  <span className="badge-info text-xs">Worker {w.percent}%</span>
+                                </div>
+                                <div className="flex items-center gap-3 text-sm">
+                                  <span style={{ color: 'var(--muted)' }}>Owed {fmt(w.amount)}</span>
+                                  <span className={done ? 'badge-success' : 'badge-danger'}>{done ? 'Paid' : fmt(remaining) + ' due'}</span>
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
 
-                              {/* Add Transaction Form */}
-                              <div className="bg-white rounded-lg p-4 shadow-sm">
-                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-3">Record a Transaction</h4>
-                                <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                                  <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">Type</label>
-                                    <select
-                                      className="input py-1 text-sm"
-                                      value={txnForm.transaction_type}
-                                      onChange={(e) => setTxnForm(prev => ({ ...prev, transaction_type: e.target.value as PayoutTransaction['transaction_type'], recipient: '' }))}
-                                    >
-                                      <option value="deposit_received">Deposit Received</option>
-                                      <option value="payment_to_sales">Payment to Sales</option>
-                                      <option value="payment_to_worker">Payment to Worker</option>
-                                      <option value="payment_to_business">Payment to Business</option>
-                                    </select>
+                      {/* Add Transaction */}
+                      <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--background)' }}>
+                        <h4 className="text-xs font-semibold uppercase mb-3" style={{ color: 'var(--muted)' }}>Record a Transaction</h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div>
+                            <label className="label text-xs">Type</label>
+                            <select className="input text-sm" value={txnForm.transaction_type}
+                              onChange={(e) => setTxnForm(prev => ({ ...prev, transaction_type: e.target.value as PayoutTransaction['transaction_type'], recipient: '' }))}>
+                              <option value="deposit_received">Deposit Received</option>
+                              <option value="payment_to_sales">Payment to Sales</option>
+                              <option value="payment_to_worker">Payment to Worker</option>
+                              <option value="payment_to_business">Payment to Business</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label className="label text-xs">Amount</label>
+                            <input className="input text-sm" type="number" min="0" step="0.01" value={txnForm.amount}
+                              onChange={(e) => setTxnForm(prev => ({ ...prev, amount: e.target.value }))} placeholder="0.00" />
+                          </div>
+                          <div>
+                            <label className="label text-xs">Recipient</label>
+                            {txnForm.transaction_type === 'deposit_received' ? (
+                              <input className="input text-sm" type="text" value={txnForm.recipient}
+                                onChange={(e) => setTxnForm(prev => ({ ...prev, recipient: e.target.value }))} placeholder="From client" />
+                            ) : (
+                              <select className="input text-sm" value={txnForm.recipient}
+                                onChange={(e) => setTxnForm(prev => ({ ...prev, recipient: e.target.value }))}>
+                                <option value="">Select...</option>
+                                {txnForm.transaction_type === 'payment_to_business' && <option value="Business">Business</option>}
+                                {txnForm.transaction_type === 'payment_to_sales' && savedSalesBreakdown.map((s, i) => (
+                                  <option key={i} value={s.name}>{s.name} — {fmt(s.amount)}</option>
+                                ))}
+                                {txnForm.transaction_type === 'payment_to_worker' && savedWorkerBreakdown.map((w, i) => (
+                                  <option key={i} value={w.name}>{w.name} — {fmt(w.amount)}</option>
+                                ))}
+                              </select>
+                            )}
+                          </div>
+                          <div>
+                            <label className="label text-xs">Date</label>
+                            <input className="input text-sm" type="date" value={txnForm.date}
+                              onChange={(e) => setTxnForm(prev => ({ ...prev, date: e.target.value }))} />
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3 mt-3">
+                          <input className="input text-sm flex-1" type="text" value={txnForm.description}
+                            onChange={(e) => setTxnForm(prev => ({ ...prev, description: e.target.value }))} placeholder="Description (optional)" />
+                          <button onClick={handleSaveTxn} disabled={savingTxn || !txnForm.amount}
+                            className="btn-primary py-2 px-4 text-sm flex items-center gap-1">
+                            <Plus className="h-3 w-3" />{savingTxn ? '...' : 'Add'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Transaction History */}
+                      {!loadingTxns && transactions.length > 0 && (
+                        <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--background)' }}>
+                          <h4 className="text-xs font-semibold uppercase mb-3" style={{ color: 'var(--muted)' }}>Transaction History</h4>
+                          <div className="space-y-1">
+                            {transactions.map((t) => {
+                              const typeLabels: Record<string, { label: string; color: string }> = {
+                                deposit_received: { label: 'Deposit', color: 'badge-success' },
+                                payment_to_sales: { label: 'Paid Sales', color: 'badge-warning' },
+                                payment_to_worker: { label: 'Paid Worker', color: 'badge-info' },
+                                payment_to_business: { label: 'Paid Biz', color: 'badge-gray' },
+                              }
+                              const info = typeLabels[t.transaction_type] ?? { label: t.transaction_type, color: 'badge-gray' }
+                              return (
+                                <div key={t.id} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    <span className="text-xs" style={{ color: 'var(--muted)' }}>{t.date}</span>
+                                    <span className={`${info.color} text-xs`}>{info.label}</span>
+                                    <span className="text-sm truncate" style={{ color: 'var(--foreground)' }}>{t.recipient || ''}</span>
+                                    {t.description && <span className="text-xs truncate" style={{ color: 'var(--muted)' }}>{t.description}</span>}
                                   </div>
-                                  <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">Amount ($)</label>
-                                    <input
-                                      className="input py-1 text-sm"
-                                      type="number"
-                                      min="0"
-                                      step="0.01"
-                                      value={txnForm.amount}
-                                      onChange={(e) => setTxnForm(prev => ({ ...prev, amount: e.target.value }))}
-                                      placeholder="0.00"
-                                    />
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">Recipient</label>
-                                    {txnForm.transaction_type === 'deposit_received' ? (
-                                      <input
-                                        className="input py-1 text-sm"
-                                        type="text"
-                                        value={txnForm.recipient}
-                                        onChange={(e) => setTxnForm(prev => ({ ...prev, recipient: e.target.value }))}
-                                        placeholder="From client"
-                                      />
-                                    ) : (
-                                      <select
-                                        className="input py-1 text-sm"
-                                        value={txnForm.recipient}
-                                        onChange={(e) => setTxnForm(prev => ({ ...prev, recipient: e.target.value }))}
-                                      >
-                                        <option value="">Select person...</option>
-                                        {txnForm.transaction_type === 'payment_to_business' && (
-                                          <option value="Business">Business</option>
-                                        )}
-                                        {txnForm.transaction_type === 'payment_to_sales' && savedSalesBreakdown.map((s, i) => (
-                                          <option key={i} value={s.name}>{s.name} — owed {fmt(s.amount)}</option>
-                                        ))}
-                                        {txnForm.transaction_type === 'payment_to_worker' && savedWorkerBreakdown.map((w, i) => (
-                                          <option key={i} value={w.name}>{w.name} — owed {fmt(w.amount)}</option>
-                                        ))}
-                                      </select>
-                                    )}
-                                  </div>
-                                  <div>
-                                    <label className="text-[10px] text-gray-500 uppercase">Date</label>
-                                    <input
-                                      className="input py-1 text-sm"
-                                      type="date"
-                                      value={txnForm.date}
-                                      onChange={(e) => setTxnForm(prev => ({ ...prev, date: e.target.value }))}
-                                    />
-                                  </div>
-                                  <div className="flex items-end">
-                                    <button
-                                      onClick={handleSaveTxn}
-                                      disabled={savingTxn || !txnForm.amount}
-                                      className="btn-primary py-1 px-3 text-sm w-full flex items-center justify-center gap-1"
-                                    >
-                                      <Plus className="h-3 w-3" />
-                                      {savingTxn ? 'Saving...' : 'Add'}
+                                  <div className="flex items-center gap-2 flex-shrink-0">
+                                    <span className="text-sm font-medium"
+                                      style={{ color: t.transaction_type === 'deposit_received' ? 'var(--success)' : 'var(--danger)' }}>
+                                      {t.transaction_type === 'deposit_received' ? '+' : '-'}{fmt(Number(t.amount))}
+                                    </span>
+                                    <button onClick={(e) => { e.stopPropagation(); handleDeleteTxn(t.id) }}
+                                      className="p-1 rounded transition-colors"
+                                      style={{ color: 'var(--danger)', opacity: 0.4 }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.4')}>
+                                      <Trash2 className="h-3.5 w-3.5" />
                                     </button>
                                   </div>
                                 </div>
-                                <div className="mt-2">
-                                  <input
-                                    className="input py-1 text-sm"
-                                    type="text"
-                                    value={txnForm.description}
-                                    onChange={(e) => setTxnForm(prev => ({ ...prev, description: e.target.value }))}
-                                    placeholder="Description (optional)"
-                                  />
-                                </div>
-                              </div>
-
-                              {/* Transaction History */}
-                              <div className="bg-white rounded-lg p-4 shadow-sm">
-                                <h4 className="text-xs font-semibold text-gray-600 uppercase mb-3">Transaction History</h4>
-                                {loadingTxns ? (
-                                  <p className="text-xs text-gray-400">Loading...</p>
-                                ) : transactions.length === 0 ? (
-                                  <p className="text-xs text-gray-400">No transactions recorded yet.</p>
-                                ) : (
-                                  <table className="w-full text-sm">
-                                    <thead>
-                                      <tr className="text-left text-xs text-gray-500 border-b">
-                                        <th className="py-1">Date</th>
-                                        <th className="py-1">Type</th>
-                                        <th className="py-1">Recipient</th>
-                                        <th className="py-1 text-right">Amount</th>
-                                        <th className="py-1">Description</th>
-                                        <th className="py-1 w-8"></th>
-                                      </tr>
-                                    </thead>
-                                    <tbody>
-                                      {transactions.map((t) => {
-                                        const typeLabels: Record<string, { label: string; color: string }> = {
-                                          deposit_received: { label: 'Deposit', color: 'text-green-700 bg-green-50' },
-                                          payment_to_sales: { label: 'Paid Sales', color: 'text-orange-700 bg-orange-50' },
-                                          payment_to_worker: { label: 'Paid Worker', color: 'text-blue-700 bg-blue-50' },
-                                          payment_to_business: { label: 'Paid Business', color: 'text-gray-700 bg-gray-100' },
-                                        }
-                                        const info = typeLabels[t.transaction_type] ?? { label: t.transaction_type, color: 'text-gray-600' }
-                                        return (
-                                          <tr key={t.id} className="border-b border-gray-100">
-                                            <td className="py-1 whitespace-nowrap">{t.date}</td>
-                                            <td className="py-1">
-                                              <span className={`text-xs px-1.5 py-0.5 rounded font-medium ${info.color}`}>{info.label}</span>
-                                            </td>
-                                            <td className="py-1 text-gray-600">{t.recipient || '—'}</td>
-                                            <td className={`py-1 text-right font-medium ${t.transaction_type === 'deposit_received' ? 'text-green-700' : 'text-red-600'}`}>
-                                              {t.transaction_type === 'deposit_received' ? '+' : '-'}{fmt(Number(t.amount))}
-                                            </td>
-                                            <td className="py-1 text-xs text-gray-400 truncate max-w-[200px]">{t.description || ''}</td>
-                                            <td className="py-1">
-                                              <button
-                                                onClick={(e) => { e.stopPropagation(); handleDeleteTxn(t.id) }}
-                                                className="text-gray-300 hover:text-red-500"
-                                                title="Delete transaction"
-                                              >
-                                                <Trash2 className="h-3.5 w-3.5" />
-                                              </button>
-                                            </td>
-                                          </tr>
-                                        )
-                                      })}
-                                    </tbody>
-                                  </table>
-                                )}
-                              </div>
-
-                            </div>
-                          </td>
-                        </tr>
+                              )
+                            })}
+                          </div>
+                        </div>
                       )}
-                    </React.Fragment>
-                  )
-                })}
-              </tbody>
-            </table>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </div>
