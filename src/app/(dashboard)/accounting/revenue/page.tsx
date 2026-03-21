@@ -13,9 +13,18 @@ import {
   DollarSign,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import {
+  getMediaSplitTier,
+  calculateMediaSplit,
+  STUDIO_SPLITS,
+  STUDIO_ENGINEERS,
+  STUDIO_RATES,
+} from '@/lib/constants/splitStructure'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
+
+const pct = (n: number) => `${Math.round(n * 100)}%`
 
 const fmtDate = (d: string) =>
   new Date(d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
@@ -37,7 +46,7 @@ const emptyStudio = {
   type: 'recording',
   hours: '',
   rate: '',
-  engineer_payout_pct: '50',
+  engineer_payout_pct: '60',
 }
 
 const emptyBeat = {
@@ -101,13 +110,16 @@ export default function RevenuePage() {
     setSubmitting(true)
     const supabase = createSupabaseBrowserClient()
     const gross = Number(mediaForm.gross_revenue)
+    const split = calculateMediaSplit(gross, false) // currently 0 salespeople
     const row = {
       created_at: new Date(mediaForm.date).toISOString(),
       client: mediaForm.client,
       type: mediaForm.type,
       gross_revenue: gross,
-      business_cut: gross * 0.35,
-      labor_pool: gross * 0.65,
+      business_cut: split.businessAmount,
+      labor_pool: split.workerAmount,
+      sales_cut: split.salesAmount,
+      tier_label: split.tier.label,
       status: mediaForm.status,
     }
     const { data } = await (supabase.from('media_projects') as any).insert(row).select().single()
@@ -272,10 +284,21 @@ export default function RevenuePage() {
                 </select>
               </div>
               <div className="form-group sm:col-span-2 lg:col-span-3 flex items-end">
-                <div className="flex items-center gap-3 text-sm" style={{ color: 'var(--muted)' }}>
-                  <span>Business Cut (35%): <strong style={{ color: 'var(--foreground)' }}>{fmt(Number(mediaForm.gross_revenue || 0) * 0.35)}</strong></span>
-                  <span>Labor Pool (65%): <strong style={{ color: 'var(--foreground)' }}>{fmt(Number(mediaForm.gross_revenue || 0) * 0.65)}</strong></span>
-                </div>
+                {(() => {
+                  const gross = Number(mediaForm.gross_revenue || 0)
+                  const tier = getMediaSplitTier(gross)
+                  const split = calculateMediaSplit(gross, false)
+                  return (
+                    <div className="space-y-1 text-sm" style={{ color: 'var(--muted)' }}>
+                      <span className="badge-info text-xs">{tier.label} tier</span>
+                      <div className="flex items-center gap-3 mt-1">
+                        <span>Business ({pct(tier.business + tier.salesReward)}): <strong style={{ color: 'var(--foreground)' }}>{fmt(split.businessAmount)}</strong></span>
+                        <span>Worker ({pct(tier.worker)}): <strong style={{ color: 'var(--foreground)' }}>{fmt(split.workerAmount)}</strong></span>
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>(Sales reward {pct(tier.salesReward)} held — no salesperson)</span>
+                      </div>
+                    </div>
+                  )
+                })()}
               </div>
               <div className="form-group flex items-end">
                 <button type="submit" className="btn-primary w-full" disabled={submitting}>
@@ -403,34 +426,43 @@ export default function RevenuePage() {
                   <th>Client</th>
                   <th>Type</th>
                   <th>Gross Revenue</th>
-                  <th>Business Cut (35%)</th>
-                  <th>Labor Pool (65%)</th>
+                  <th>Tier</th>
+                  <th>Business Cut</th>
+                  <th>Worker Pool</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {mediaProjects.length === 0 ? (
-                  <tr><td colSpan={7} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this month</td></tr>
+                  <tr><td colSpan={8} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this month</td></tr>
                 ) : (
-                  mediaProjects.map((p: any) => (
-                    <tr key={p.id}>
-                      <td>{fmtDate(p.created_at)}</td>
-                      <td className="font-medium">{p.client || '-'}</td>
-                      <td><span className="badge-info capitalize">{p.type || '-'}</span></td>
-                      <td className="font-medium">{fmt(Number(p.gross_revenue || 0))}</td>
-                      <td>{fmt(Number(p.business_cut || Number(p.gross_revenue || 0) * 0.35))}</td>
-                      <td>{fmt(Number(p.labor_pool || Number(p.gross_revenue || 0) * 0.65))}</td>
-                      <td>
-                        <span className={
-                          p.status === 'completed' ? 'badge-success' :
-                          p.status === 'in_progress' ? 'badge-warning' :
-                          'badge-gray'
-                        }>
-                          {p.status || 'pending'}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
+                  mediaProjects.map((p: any) => {
+                    const gross = Number(p.gross_revenue || 0)
+                    const split = calculateMediaSplit(gross, false)
+                    const businessCut = p.business_cut != null ? Number(p.business_cut) : split.businessAmount
+                    const workerPool = p.labor_pool != null ? Number(p.labor_pool) : split.workerAmount
+                    const tierLabel = p.tier_label || split.tier.label
+                    return (
+                      <tr key={p.id}>
+                        <td>{fmtDate(p.created_at)}</td>
+                        <td className="font-medium">{p.client || '-'}</td>
+                        <td><span className="badge-info capitalize">{p.type || '-'}</span></td>
+                        <td className="font-medium">{fmt(gross)}</td>
+                        <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{tierLabel}</span></td>
+                        <td>{fmt(businessCut)}</td>
+                        <td>{fmt(workerPool)}</td>
+                        <td>
+                          <span className={
+                            p.status === 'completed' ? 'badge-success' :
+                            p.status === 'in_progress' ? 'badge-warning' :
+                            'badge-gray'
+                          }>
+                            {p.status || 'pending'}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
                 )}
               </tbody>
             </table>

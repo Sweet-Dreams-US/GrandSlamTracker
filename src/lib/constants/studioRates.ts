@@ -25,10 +25,10 @@ export const SPLITS = {
 
 // Engineer roster
 export const ENGINEERS = [
-  { id: 'proverb', name: 'Proverb' },
-  { id: 'isaac', name: 'Isaac' },
-  { id: 'jay_cole', name: 'Jay Cole' },
-  { id: 'zion', name: 'Zion' },
+  { id: 'prvrb', name: 'PRVRB' },
+  { id: 'iszac_griner', name: 'Iszac Griner' },
+  { id: 'zion_tinsley', name: 'Zion Tinsley' },
+  { id: 'jay_val_leo', name: 'Jay Val Leo' },
 ] as const
 
 export type EngineerId = (typeof ENGINEERS)[number]['id']

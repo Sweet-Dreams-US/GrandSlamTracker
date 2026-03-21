@@ -33,10 +33,10 @@ interface EngineerAccount {
 }
 
 const ENGINEER_USERS: EngineerAccount[] = [
-  { username: 'proverb', password: 'ProverbStudio2025', engineerId: 'proverb', displayName: 'Proverb' },
-  { username: 'isaac', password: 'IsaacStudio2025', engineerId: 'isaac', displayName: 'Isaac' },
-  { username: 'cole', password: 'NeverPonYourA7', engineerId: 'jay_cole', displayName: 'Jay Cole' },
-  { username: 'zion', password: 'ZionStudio2025', engineerId: 'zion', displayName: 'Zion' },
+  { username: 'prvrb', password: 'ProverbStudio2025', engineerId: 'prvrb', displayName: 'PRVRB' },
+  { username: 'iszac', password: 'IsaacStudio2025', engineerId: 'iszac_griner', displayName: 'Iszac Griner' },
+  { username: 'jayvalleo', password: 'NeverPonYourA7', engineerId: 'jay_val_leo', displayName: 'Jay Val Leo' },
+  { username: 'zion', password: 'ZionStudio2025', engineerId: 'zion_tinsley', displayName: 'Zion Tinsley' },
 ]
 
 type Tab = 'log' | 'sessions' | 'payouts'

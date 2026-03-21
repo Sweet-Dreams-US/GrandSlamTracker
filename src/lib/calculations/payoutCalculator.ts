@@ -1,7 +1,5 @@
 import {
   PayoutSplit,
-  DEFAULT_SPLIT,
-  getSplitForContractType,
   getSplitForAmount,
 } from '../constants/payoutSplits'
 
@@ -29,17 +27,15 @@ export function calculatePayout(
     customSplit?: PayoutSplit
   } = {}
 ): PayoutCalculationResult {
-  const { contractType = 'standard', useAmountTiers = false, customSplit } = options
+  const { contractType: _contractType = 'standard', useAmountTiers = true, customSplit } = options
 
-  // Determine which split to use
+  // Determine which split to use — always use tiered amounts by default
   let split: PayoutSplit
 
   if (customSplit) {
     split = customSplit
-  } else if (useAmountTiers) {
-    split = getSplitForAmount(totalFee)
   } else {
-    split = getSplitForContractType(contractType)
+    split = getSplitForAmount(totalFee)
   }
 
   // Validate split adds up to 1

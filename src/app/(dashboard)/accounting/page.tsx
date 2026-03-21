@@ -17,6 +17,7 @@ import {
   Loader2,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
+import { calculateMediaSplit } from '@/lib/constants/splitStructure'
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
@@ -73,9 +74,15 @@ export default function AccountingDashboard() {
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount || 0), 0)
   const netIncome = totalRevenue - totalExpenses
 
-  // Business fund: 35% of media + business retention from studio & beats
+  // Business fund: tiered media splits + business retention from studio & beats
+  const mediaBusinessCut = mediaProjects.reduce((s, p) => {
+    const gross = Number(p.gross_revenue || 0)
+    // Use stored business_cut if available, otherwise calculate from tiered split
+    if (p.business_cut != null) return s + Number(p.business_cut)
+    return s + calculateMediaSplit(gross, false).businessAmount
+  }, 0)
   const businessFund =
-    mediaRevenue * 0.35 +
+    mediaBusinessCut +
     studioSessions.reduce((s, p) => s + Number(p.business_retention || 0), 0) +
     beatSales.reduce((s, p) => s + Number(p.business_retention || 0), 0) -
     totalExpenses

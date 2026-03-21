@@ -1,5 +1,16 @@
-// Internal payout split configurations
-// Business always gets 30%, remaining 70% split between sales and worker
+// ─────────────────────────────────────────────────────────────
+// Payout split configurations for Sweet Dreams US (Media Agency)
+//
+// Variable tiered splits — see splitStructure.ts for the
+// canonical tier definitions and calculation helpers.
+// ─────────────────────────────────────────────────────────────
+
+import {
+  type MediaRevenueTier,
+  MEDIA_REVENUE_TIERS,
+  getMediaSplitTier,
+  calculateMediaSplit,
+} from './splitStructure'
 
 export interface PayoutSplit {
   business: number
@@ -7,94 +18,39 @@ export interface PayoutSplit {
   worker: number
 }
 
-// Default split for standard contracts
-export const DEFAULT_SPLIT: PayoutSplit = {
-  business: 0.30,
-  sales: 0.35,
-  worker: 0.35,
-}
+// ── Convenience re-exports ──────────────────────────────────
+export { MEDIA_REVENUE_TIERS, getMediaSplitTier, calculateMediaSplit }
+export type { MediaRevenueTier }
 
-// Split when there's no dedicated salesperson (owner referred)
-export const NO_SALES_SPLIT: PayoutSplit = {
-  business: 0.30,
-  sales: 0.00,
-  worker: 0.70,
-}
+// ── Legacy helpers (kept for backward compatibility) ────────
 
-// Split for self-generated leads
-export const SELF_GENERATED_SPLIT: PayoutSplit = {
-  business: 0.30,
-  sales: 0.20,
-  worker: 0.50,
-}
-
-// Contract type splits
-export const CONTRACT_TYPE_SPLITS: Record<string, PayoutSplit> = {
-  standard: DEFAULT_SPLIT,
-  referral: {
-    business: 0.30,
-    sales: 0.40,
-    worker: 0.30,
-  },
-  partnership: {
-    business: 0.40,
-    sales: 0.30,
-    worker: 0.30,
-  },
-  owner_direct: NO_SALES_SPLIT,
-  self_generated: SELF_GENERATED_SPLIT,
-}
-
-// Tiered splits based on fee amount (larger fees = adjusted percentages)
-export interface TieredSplit {
-  maxAmount: number | null
-  split: PayoutSplit
-}
-
-export const AMOUNT_TIERED_SPLITS: TieredSplit[] = [
-  {
-    maxAmount: 1000,
-    split: { business: 0.30, sales: 0.35, worker: 0.35 },
-  },
-  {
-    maxAmount: 3000,
-    split: { business: 0.30, sales: 0.33, worker: 0.37 },
-  },
-  {
-    maxAmount: 5000,
-    split: { business: 0.30, sales: 0.30, worker: 0.40 },
-  },
-  {
-    maxAmount: null, // No limit
-    split: { business: 0.30, sales: 0.28, worker: 0.42 },
-  },
-]
-
-export function getSplitForContractType(contractType: string): PayoutSplit {
-  return CONTRACT_TYPE_SPLITS[contractType] ?? DEFAULT_SPLIT
-}
-
+/**
+ * @deprecated Use `getMediaSplitTier()` from splitStructure.ts instead.
+ * Returns a PayoutSplit for a given project revenue amount using the
+ * tiered structure.
+ */
 export function getSplitForAmount(amount: number): PayoutSplit {
-  for (const tier of AMOUNT_TIERED_SPLITS) {
-    if (tier.maxAmount === null || amount <= tier.maxAmount) {
-      return tier.split
-    }
+  const tier = getMediaSplitTier(amount)
+  return {
+    business: tier.business,
+    sales: tier.salesReward,
+    worker: tier.worker,
   }
-  return DEFAULT_SPLIT
 }
 
+/**
+ * @deprecated Use `calculateMediaSplit()` from splitStructure.ts instead.
+ */
 export function calculatePayout(
   totalFee: number,
-  contractType: string = 'standard',
-  useAmountTiers: boolean = false
+  _contractType: string = 'standard',
+  _useAmountTiers: boolean = true,
 ): { business: number; sales: number; worker: number } {
-  const split = useAmountTiers
-    ? getSplitForAmount(totalFee)
-    : getSplitForContractType(contractType)
-
+  const split = calculateMediaSplit(totalFee, false)
+  const tier = getMediaSplitTier(totalFee)
   return {
-    business: Math.round(totalFee * split.business * 100) / 100,
-    sales: Math.round(totalFee * split.sales * 100) / 100,
-    worker: Math.round(totalFee * split.worker * 100) / 100,
+    business: split.businessAmount,
+    sales: split.salesAmount,
+    worker: split.workerAmount,
   }
 }
