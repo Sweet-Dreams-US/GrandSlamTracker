@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import Link from 'next/link'
 import {
   ArrowLeft,
@@ -11,6 +11,11 @@ import {
   X,
   Loader2,
   DollarSign,
+  Trash2,
+  Eye,
+  ChevronDown,
+  ChevronRight,
+  Users,
 } from 'lucide-react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
 import {
@@ -73,6 +78,9 @@ export default function RevenuePage() {
   const [mediaForm, setMediaForm] = useState({ ...emptyMedia })
   const [studioForm, setStudioForm] = useState({ ...emptyStudio })
   const [beatForm, setBeatForm] = useState({ ...emptyBeat })
+  const [expandedMediaId, setExpandedMediaId] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
 
   const [selectedMonth, setSelectedMonth] = useState(() => {
     const now = new Date()
@@ -88,7 +96,7 @@ export default function RevenuePage() {
       const end = new Date(year, month, 0, 23, 59, 59).toISOString()
 
       const [mediaRes, beatsRes, studioApiRes] = await Promise.all([
-        (supabase.from('payout_records') as any).select('*').gte('date', start.split('T')[0]).lte('date', end.split('T')[0]).order('date', { ascending: false }),
+        (supabase.from('payout_records') as any).select('*').order('date', { ascending: false }),
         (supabase.from('beat_sales') as any).select('*').gte('date', start).lte('date', end).order('date', { ascending: false }),
         fetch(`/api/studio-revenue?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`).then(r => r.json()).catch(() => ({ sessions: [] })),
       ])
@@ -104,6 +112,16 @@ export default function RevenuePage() {
   const mediaTotal = mediaProjects.reduce((s, p) => s + Number(p.total_revenue || 0), 0)
   const studioTotal = studioSessions.reduce((s, p) => s + Number(p.billed || 0), 0)
   const beatTotal = beatSales.reduce((s, p) => s + Number(p.price || 0), 0)
+
+  async function handleDeletePayout(id: string) {
+    setDeleting(id)
+    const supabase = createSupabaseBrowserClient()
+    await (supabase.from('payout_records') as any).delete().eq('id', id)
+    setMediaProjects((prev) => prev.filter((p) => p.id !== id))
+    setConfirmDelete(null)
+    setExpandedMediaId(null)
+    setDeleting(null)
+  }
 
   async function handleMediaSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -421,34 +439,159 @@ export default function RevenuePage() {
             <table className="table">
               <thead>
                 <tr>
+                  <th className="w-8"></th>
                   <th>Date</th>
                   <th>Client</th>
-                  <th>Type</th>
                   <th>Gross Revenue</th>
                   <th>Tier</th>
                   <th>Business</th>
                   <th>Sales</th>
                   <th>Workers</th>
+                  <th className="w-10"></th>
                 </tr>
               </thead>
               <tbody>
                 {mediaProjects.length === 0 ? (
-                  <tr><td colSpan={8} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this month</td></tr>
+                  <tr><td colSpan={9} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this period</td></tr>
                 ) : (
-                  mediaProjects.map((p: any) => (
-                    <tr key={p.id}>
-                      <td>{fmtDate(p.date || p.created_at)}</td>
-                      <td className="font-medium">{p.client_name || '-'}</td>
-                      <td><span className="badge-info capitalize">{p.deal_type?.replace('_', ' ') || '-'}</span></td>
-                      <td className="font-medium">{fmt(Number(p.total_revenue || 0))}</td>
-                      <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{p.tier_used || '-'}</span></td>
-                      <td style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</td>
-                      <td style={{ color: 'var(--accent)' }}>{fmt(Number(p.sales_amount || 0))}</td>
-                      <td style={{ color: 'var(--warning)' }}>{fmt(Number(p.worker_amount || 0))}</td>
-                    </tr>
-                  ))
+                  mediaProjects.map((p: any) => {
+                    const isExpanded = expandedMediaId === p.id
+                    const details = p.calculation_details
+                    const workers = details?.workerBreakdown || []
+                    const sales = details?.salesBreakdown || []
+                    return (
+                      <React.Fragment key={p.id}>
+                        <tr
+                          className="cursor-pointer transition-colors"
+                          style={{ backgroundColor: isExpanded ? 'var(--surface-hover)' : undefined }}
+                          onClick={() => setExpandedMediaId(isExpanded ? null : p.id)}
+                        >
+                          <td className="pr-0">
+                            {isExpanded
+                              ? <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
+                              : <ChevronRight className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
+                            }
+                          </td>
+                          <td>{fmtDate(p.date || p.created_at)}</td>
+                          <td className="font-medium">{p.client_name || '-'}</td>
+                          <td className="font-medium">{fmt(Number(p.total_revenue || 0))}</td>
+                          <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{p.tier_used || '-'}</span></td>
+                          <td style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</td>
+                          <td style={{ color: 'var(--accent)' }}>{fmt(Number(p.sales_amount || 0))}</td>
+                          <td style={{ color: 'var(--warning)' }}>{fmt(Number(p.worker_amount || 0))}</td>
+                          <td className="pl-0">
+                            {confirmDelete === p.id ? (
+                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                                <button
+                                  className="text-xs px-2 py-1 rounded"
+                                  style={{ backgroundColor: 'var(--danger)', color: 'white' }}
+                                  onClick={() => handleDeletePayout(p.id)}
+                                  disabled={deleting === p.id}
+                                >
+                                  {deleting === p.id ? '...' : 'Yes'}
+                                </button>
+                                <button
+                                  className="text-xs px-2 py-1 rounded"
+                                  style={{ backgroundColor: 'var(--surface)', color: 'var(--foreground)' }}
+                                  onClick={() => setConfirmDelete(null)}
+                                >
+                                  No
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                className="p-1 rounded transition-colors opacity-40 hover:opacity-100"
+                                style={{ color: 'var(--danger)' }}
+                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id) }}
+                                title="Delete payout"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr>
+                            <td colSpan={9} className="p-0">
+                              <div className="px-6 py-4" style={{ backgroundColor: 'var(--surface)' }}>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                  {/* Workers */}
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
+                                      <Users className="h-3 w-3 inline mr-1" />Workers
+                                    </p>
+                                    {workers.length > 0 ? workers.map((w: any, i: number) => (
+                                      <div key={i} className="flex justify-between text-sm py-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                                        <span style={{ color: 'var(--foreground)' }}>{w.name} ({w.percent}%)</span>
+                                        <span className="font-medium" style={{ color: 'var(--warning)' }}>{fmt(w.amount)}</span>
+                                      </div>
+                                    )) : (
+                                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{p.worker_person || 'No breakdown'}</p>
+                                    )}
+                                  </div>
+                                  {/* Sales */}
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
+                                      <DollarSign className="h-3 w-3 inline mr-1" />Sales Commission
+                                    </p>
+                                    {sales.length > 0 ? sales.map((s: any, i: number) => (
+                                      <div key={i} className="flex justify-between text-sm py-1" style={{ borderBottom: '1px solid var(--border)' }}>
+                                        <span style={{ color: 'var(--foreground)' }}>{s.name} ({s.percent}%)</span>
+                                        <span className="font-medium" style={{ color: 'var(--accent)' }}>{fmt(s.amount)}</span>
+                                      </div>
+                                    )) : (
+                                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{p.sales_person || 'No salesperson'}</p>
+                                    )}
+                                  </div>
+                                  {/* Details */}
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>Details</p>
+                                    <div className="space-y-1 text-sm">
+                                      <div className="flex justify-between">
+                                        <span style={{ color: 'var(--muted)' }}>Deal Type</span>
+                                        <span className="capitalize" style={{ color: 'var(--foreground)' }}>{p.deal_type?.replace('_', ' ') || '-'}</span>
+                                      </div>
+                                      <div className="flex justify-between">
+                                        <span style={{ color: 'var(--muted)' }}>Business Cut</span>
+                                        <span style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</span>
+                                      </div>
+                                      {p.notes && (
+                                        <div className="pt-2">
+                                          <span className="text-xs" style={{ color: 'var(--muted)' }}>Notes: </span>
+                                          <span className="text-xs" style={{ color: 'var(--foreground)' }}>{p.notes}</span>
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    )
+                  })
                 )}
               </tbody>
+              {mediaProjects.length > 0 && (
+                <tfoot>
+                  <tr>
+                    <td colSpan={3}></td>
+                    <td className="font-bold">{fmt(mediaTotal)}</td>
+                    <td></td>
+                    <td className="font-bold" style={{ color: 'var(--success)' }}>
+                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.business_amount || 0), 0))}
+                    </td>
+                    <td className="font-bold" style={{ color: 'var(--accent)' }}>
+                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.sales_amount || 0), 0))}
+                    </td>
+                    <td className="font-bold" style={{ color: 'var(--warning)' }}>
+                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.worker_amount || 0), 0))}
+                    </td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              )}
             </table>
           )}
 
