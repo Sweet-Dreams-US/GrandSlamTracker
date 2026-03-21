@@ -637,168 +637,200 @@ export default function RevenuePage() {
           <Loader2 className="h-6 w-6 animate-spin" style={{ color: 'var(--accent)' }} />
         </div>
       ) : (
-        <div className="table-container">
+        <div>
           {tab === 'media' && (
-            <table className="table">
-              <thead>
-                <tr>
-                  <th className="w-8"></th>
-                  <th>Date</th>
-                  <th>Client</th>
-                  <th>Gross Revenue</th>
-                  <th>Tier</th>
-                  <th>Business</th>
-                  <th>Sales</th>
-                  <th>Workers</th>
-                  <th className="w-10"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {mediaProjects.length === 0 ? (
-                  <tr><td colSpan={9} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this period</td></tr>
-                ) : (
-                  mediaProjects.map((p: any) => {
+            <div className="space-y-3">
+              {mediaProjects.length === 0 ? (
+                <div className="card p-8 text-center" style={{ color: 'var(--muted)' }}>
+                  <Film className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm">No media projects yet</p>
+                </div>
+              ) : (
+                <>
+                  {/* Totals Bar */}
+                  <div className="card p-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--muted)' }}>Total Revenue</p>
+                        <p className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>{fmt(mediaTotal)}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--muted)' }}>Business</p>
+                        <p className="font-semibold" style={{ color: 'var(--success)' }}>
+                          {fmt(mediaProjects.reduce((s, p) => s + Number(p.business_amount || 0), 0))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--muted)' }}>Sales</p>
+                        <p className="font-semibold" style={{ color: 'var(--accent)' }}>
+                          {fmt(mediaProjects.reduce((s, p) => s + Number(p.sales_amount || 0), 0))}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs" style={{ color: 'var(--muted)' }}>Workers</p>
+                        <p className="font-semibold" style={{ color: 'var(--warning)' }}>
+                          {fmt(mediaProjects.reduce((s, p) => s + Number(p.worker_amount || 0), 0))}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Job Cards */}
+                  {mediaProjects.map((p: any) => {
                     const isExpanded = expandedMediaId === p.id
                     const details = p.calculation_details
                     const workers = details?.workerBreakdown || []
                     const sales = details?.salesBreakdown || []
                     return (
-                      <React.Fragment key={p.id}>
-                        <tr
-                          className="cursor-pointer transition-colors"
+                      <div key={p.id} className="card overflow-hidden">
+                        {/* Card Header */}
+                        <div
+                          className="p-4 cursor-pointer transition-colors"
                           style={{ backgroundColor: isExpanded ? 'var(--surface-hover)' : undefined }}
                           onClick={() => setExpandedMediaId(isExpanded ? null : p.id)}
                         >
-                          <td className="pr-0">
-                            {isExpanded
-                              ? <ChevronDown className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
-                              : <ChevronRight className="h-3.5 w-3.5" style={{ color: 'var(--muted)' }} />
-                            }
-                          </td>
-                          <td>{fmtDate(p.date || p.created_at)}</td>
-                          <td className="font-medium">{p.client_name || '-'}</td>
-                          <td className="font-medium">{fmt(Number(p.total_revenue || 0))}</td>
-                          <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{p.tier_used || '-'}</span></td>
-                          <td style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</td>
-                          <td style={{ color: 'var(--accent)' }}>{fmt(Number(p.sales_amount || 0))}</td>
-                          <td style={{ color: 'var(--warning)' }}>{fmt(Number(p.worker_amount || 0))}</td>
-                          <td className="pl-0">
-                            {confirmDelete === p.id ? (
-                              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                <button
-                                  className="text-xs px-2 py-1 rounded"
-                                  style={{ backgroundColor: 'var(--danger)', color: 'white' }}
-                                  onClick={() => handleDeletePayout(p.id)}
-                                  disabled={deleting === p.id}
-                                >
-                                  {deleting === p.id ? '...' : 'Yes'}
-                                </button>
-                                <button
-                                  className="text-xs px-2 py-1 rounded"
-                                  style={{ backgroundColor: 'var(--surface)', color: 'var(--foreground)' }}
-                                  onClick={() => setConfirmDelete(null)}
-                                >
-                                  No
-                                </button>
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0 flex-1">
+                              <div className="pt-0.5">
+                                {isExpanded
+                                  ? <ChevronDown className="h-4 w-4" style={{ color: 'var(--muted)' }} />
+                                  : <ChevronRight className="h-4 w-4" style={{ color: 'var(--muted)' }} />
+                                }
                               </div>
-                            ) : (
-                              <button
-                                className="p-1 rounded transition-colors opacity-40 hover:opacity-100"
-                                style={{ color: 'var(--danger)' }}
-                                onClick={(e) => { e.stopPropagation(); setConfirmDelete(p.id) }}
-                                title="Delete payout"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </button>
-                            )}
-                          </td>
-                        </tr>
-                        {isExpanded && (
-                          <tr>
-                            <td colSpan={9} className="p-0">
-                              <div className="px-6 py-4" style={{ backgroundColor: 'var(--surface)' }}>
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                  {/* Workers */}
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
-                                      <Users className="h-3 w-3 inline mr-1" />Workers
-                                    </p>
-                                    {workers.length > 0 ? workers.map((w: any, i: number) => (
-                                      <div key={i} className="flex justify-between text-sm py-1" style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <span style={{ color: 'var(--foreground)' }}>{w.name} ({w.percent}%)</span>
-                                        <span className="font-medium" style={{ color: 'var(--warning)' }}>{fmt(w.amount)}</span>
-                                      </div>
-                                    )) : (
-                                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{p.worker_person || 'No breakdown'}</p>
-                                    )}
-                                  </div>
-                                  {/* Sales */}
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>
-                                      <DollarSign className="h-3 w-3 inline mr-1" />Sales Commission
-                                    </p>
-                                    {sales.length > 0 ? sales.map((s: any, i: number) => (
-                                      <div key={i} className="flex justify-between text-sm py-1" style={{ borderBottom: '1px solid var(--border)' }}>
-                                        <span style={{ color: 'var(--foreground)' }}>{s.name} ({s.percent}%)</span>
-                                        <span className="font-medium" style={{ color: 'var(--accent)' }}>{fmt(s.amount)}</span>
-                                      </div>
-                                    )) : (
-                                      <p className="text-xs" style={{ color: 'var(--muted)' }}>{p.sales_person || 'No salesperson'}</p>
-                                    )}
-                                  </div>
-                                  {/* Details */}
-                                  <div>
-                                    <p className="text-xs uppercase tracking-wider mb-2" style={{ color: 'var(--muted)' }}>Details</p>
-                                    <div className="space-y-1 text-sm">
-                                      <div className="flex justify-between">
-                                        <span style={{ color: 'var(--muted)' }}>Deal Type</span>
-                                        <span className="capitalize" style={{ color: 'var(--foreground)' }}>{p.deal_type?.replace('_', ' ') || '-'}</span>
-                                      </div>
-                                      <div className="flex justify-between">
-                                        <span style={{ color: 'var(--muted)' }}>Business Cut</span>
-                                        <span style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</span>
-                                      </div>
-                                      {p.notes && (
-                                        <div className="pt-2">
-                                          <span className="text-xs" style={{ color: 'var(--muted)' }}>Notes: </span>
-                                          <span className="text-xs" style={{ color: 'var(--foreground)' }}>{p.notes}</span>
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <h4 className="font-semibold truncate" style={{ color: 'var(--foreground)' }}>
+                                    {p.client_name || 'Untitled'}
+                                  </h4>
+                                  <span className="badge-info text-xs capitalize">{p.deal_type?.replace(/_/g, ' ') || 'transactional'}</span>
+                                </div>
+                                <div className="flex items-center gap-3 mt-1 text-xs" style={{ color: 'var(--muted)' }}>
+                                  <span>{fmtDate(p.date || p.created_at)}</span>
+                                  {p.tier_used && <span>{p.tier_used}</span>}
+                                  {p.notes && <span className="truncate max-w-[200px]">{p.notes}</span>}
                                 </div>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+                            <div className="flex items-center gap-4 flex-shrink-0">
+                              <div className="text-right">
+                                <p className="font-bold" style={{ color: 'var(--foreground)' }}>{fmt(Number(p.total_revenue || 0))}</p>
+                                <div className="flex items-center gap-2 mt-0.5 text-xs">
+                                  <span style={{ color: 'var(--success)' }}>B {fmt(Number(p.business_amount || 0))}</span>
+                                  <span style={{ color: 'var(--warning)' }}>W {fmt(Number(p.worker_amount || 0))}</span>
+                                </div>
+                              </div>
+                              {/* Delete Button */}
+                              <div onClick={(e) => e.stopPropagation()}>
+                                {confirmDelete === p.id ? (
+                                  <div className="flex flex-col gap-1">
+                                    <button
+                                      className="text-xs px-3 py-1.5 rounded font-medium"
+                                      style={{ backgroundColor: 'var(--danger)', color: 'white' }}
+                                      onClick={() => handleDeletePayout(p.id)}
+                                      disabled={deleting === p.id}
+                                    >
+                                      {deleting === p.id ? 'Deleting...' : 'Delete'}
+                                    </button>
+                                    <button
+                                      className="text-xs px-3 py-1 rounded"
+                                      style={{ color: 'var(--muted)' }}
+                                      onClick={() => setConfirmDelete(null)}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    className="p-2 rounded-lg transition-colors"
+                                    style={{ color: 'var(--danger)', backgroundColor: 'transparent' }}
+                                    onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(239, 68, 68, 0.1)')}
+                                    onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                    onClick={() => setConfirmDelete(p.id)}
+                                    title="Delete this job"
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Expanded Detail */}
+                        {isExpanded && (
+                          <div className="px-4 pb-4 pt-0" style={{ borderTop: '1px solid var(--border)' }}>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-4">
+                              {/* Workers */}
+                              <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                                <p className="text-xs uppercase tracking-wider mb-2 font-medium" style={{ color: 'var(--warning)' }}>
+                                  Workers
+                                </p>
+                                {workers.length > 0 ? workers.map((w: any, i: number) => (
+                                  <div key={i} className="flex justify-between text-sm py-1.5" style={{ borderBottom: '1px solid var(--border)' }}>
+                                    <span style={{ color: 'var(--foreground)' }}>{w.name} <span className="text-xs" style={{ color: 'var(--muted)' }}>({w.percent}%)</span></span>
+                                    <span className="font-medium" style={{ color: 'var(--warning)' }}>{fmt(w.amount)}</span>
+                                  </div>
+                                )) : (
+                                  <p className="text-sm" style={{ color: 'var(--muted)' }}>{p.worker_person || 'No breakdown available'}</p>
+                                )}
+                              </div>
+                              {/* Sales */}
+                              <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                                <p className="text-xs uppercase tracking-wider mb-2 font-medium" style={{ color: 'var(--accent)' }}>
+                                  Sales Commission
+                                </p>
+                                {sales.length > 0 ? sales.map((s: any, i: number) => (
+                                  <div key={i} className="flex justify-between text-sm py-1.5" style={{ borderBottom: '1px solid var(--border)' }}>
+                                    <span style={{ color: 'var(--foreground)' }}>{s.name} <span className="text-xs" style={{ color: 'var(--muted)' }}>({s.percent}%)</span></span>
+                                    <span className="font-medium" style={{ color: 'var(--accent)' }}>{fmt(s.amount)}</span>
+                                  </div>
+                                )) : (
+                                  <p className="text-sm" style={{ color: 'var(--muted)' }}>{p.sales_person || 'No salesperson — business absorbs'}</p>
+                                )}
+                              </div>
+                              {/* Summary */}
+                              <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--background)' }}>
+                                <p className="text-xs uppercase tracking-wider mb-2 font-medium" style={{ color: 'var(--success)' }}>
+                                  Summary
+                                </p>
+                                <div className="space-y-1.5 text-sm">
+                                  <div className="flex justify-between">
+                                    <span style={{ color: 'var(--muted)' }}>Gross</span>
+                                    <span className="font-medium" style={{ color: 'var(--foreground)' }}>{fmt(Number(p.total_revenue || 0))}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span style={{ color: 'var(--muted)' }}>Business</span>
+                                    <span style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span style={{ color: 'var(--muted)' }}>Workers</span>
+                                    <span style={{ color: 'var(--warning)' }}>{fmt(Number(p.worker_amount || 0))}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span style={{ color: 'var(--muted)' }}>Sales</span>
+                                    <span style={{ color: 'var(--accent)' }}>{fmt(Number(p.sales_amount || 0))}</span>
+                                  </div>
+                                </div>
+                                {p.notes && (
+                                  <div className="mt-3 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
+                                    <p className="text-xs" style={{ color: 'var(--muted)' }}>Notes</p>
+                                    <p className="text-sm mt-0.5" style={{ color: 'var(--foreground)' }}>{p.notes}</p>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
                         )}
-                      </React.Fragment>
+                      </div>
                     )
-                  })
-                )}
-              </tbody>
-              {mediaProjects.length > 0 && (
-                <tfoot>
-                  <tr>
-                    <td colSpan={3}></td>
-                    <td className="font-bold">{fmt(mediaTotal)}</td>
-                    <td></td>
-                    <td className="font-bold" style={{ color: 'var(--success)' }}>
-                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.business_amount || 0), 0))}
-                    </td>
-                    <td className="font-bold" style={{ color: 'var(--accent)' }}>
-                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.sales_amount || 0), 0))}
-                    </td>
-                    <td className="font-bold" style={{ color: 'var(--warning)' }}>
-                      {fmt(mediaProjects.reduce((s, p) => s + Number(p.worker_amount || 0), 0))}
-                    </td>
-                    <td></td>
-                  </tr>
-                </tfoot>
+                  })}
+                </>
               )}
-            </table>
+            </div>
           )}
 
           {tab === 'studio' && (
+            <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
             <table className="table">
               <thead>
                 <tr>
@@ -839,9 +871,11 @@ export default function RevenuePage() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
 
           {tab === 'beats' && (
+            <div className="overflow-x-auto rounded-lg" style={{ border: '1px solid var(--border)' }}>
             <table className="table">
               <thead>
                 <tr>
@@ -876,6 +910,7 @@ export default function RevenuePage() {
                 )}
               </tbody>
             </table>
+            </div>
           )}
         </div>
       )}
