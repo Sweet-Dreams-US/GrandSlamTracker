@@ -51,6 +51,7 @@ const navigation = [
     { name: 'Tax', href: '/accounting/tax', icon: Shield },
   ]},
   { name: 'Payroll', href: '/payroll', icon: Wallet, children: [
+    { name: 'Team', href: '/payroll/team', icon: Users },
     { name: 'Contractors', href: '/payroll/contractors', icon: UserCheck },
     { name: 'Payments', href: '/payroll/payments', icon: Banknote },
     { name: 'Owner Draws', href: '/payroll/owner-draws', icon: CalendarCheck },

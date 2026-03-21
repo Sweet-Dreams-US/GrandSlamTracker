@@ -110,12 +110,14 @@ function TierChart({ title, tiers, highlight }: {
 
 // --- Person List Editor ---
 
-function PersonListEditor({ label, people, onChange, poolTotal, color }: {
+function PersonListEditor({ label, people, onChange, poolTotal, color, teamMembers, filterRole }: {
   label: string
   people: PersonEntry[]
   onChange: (people: PersonEntry[]) => void
   poolTotal: number | null
   color: 'green' | 'blue'
+  teamMembers: { id: string; name: string; role: string; entity: string }[]
+  filterRole: 'worker' | 'sales'
 }) {
   const totalPercent = people.reduce((s, p) => s + (parseFloat(p.percent) || 0), 0)
   const isOver = totalPercent > 100
@@ -167,13 +169,23 @@ function PersonListEditor({ label, people, onChange, poolTotal, color }: {
           const personAmount = poolTotal !== null ? round2(poolTotal * personPercent / 100) : null
           return (
             <div key={person.id} className="flex items-center gap-2">
-              <input
+              <select
                 className="input py-1 text-sm flex-1"
-                type="text"
                 value={person.name}
                 onChange={(e) => updatePerson(person.id, { name: e.target.value })}
-                placeholder="Name"
-              />
+              >
+                <option value="">Select person...</option>
+                {teamMembers
+                  .filter((m) =>
+                    filterRole === 'worker'
+                      ? ['owner', 'worker', 'contractor'].includes(m.role) && ['sweet_dreams_us', 'both'].includes(m.entity)
+                      : ['owner', 'sales'].includes(m.role) && ['sweet_dreams_us', 'both'].includes(m.entity)
+                  )
+                  .map((m) => (
+                    <option key={m.id} value={m.name}>{m.name}</option>
+                  ))
+                }
+              </select>
               <div className="flex items-center gap-1">
                 <input
                   className="input py-1 text-sm w-20 text-right"
@@ -228,6 +240,7 @@ export default function PayoutsPage() {
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [filterDealType, setFilterDealType] = useState<string>('all')
   const [loading, setLoading] = useState(true)
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; role: string; entity: string }[]>([])
   const [expandedRecordId, setExpandedRecordId] = useState<string | null>(null)
   const [transactions, setTransactions] = useState<PayoutTransaction[]>([])
   const [loadingTxns, setLoadingTxns] = useState(false)
@@ -255,6 +268,12 @@ export default function PayoutsPage() {
 
   useEffect(() => {
     loadRecords()
+    async function loadTeamMembers() {
+      const supabase = createSupabaseBrowserClient()
+      const { data } = await (supabase.from('team_members') as any).select('id, name, role, entity').eq('status', 'active')
+      if (data) setTeamMembers(data)
+    }
+    loadTeamMembers()
   }, [])
 
   async function loadRecords() {
@@ -668,6 +687,8 @@ export default function PayoutsPage() {
               onChange={setSalesPeople}
               poolTotal={result?.internalSplit.salesAmount ?? null}
               color="green"
+              teamMembers={teamMembers}
+              filterRole="sales"
             />
           )}
 
@@ -678,6 +699,8 @@ export default function PayoutsPage() {
             onChange={setWorkers}
             poolTotal={result?.internalSplit.workerAmount ?? null}
             color="blue"
+            teamMembers={teamMembers}
+            filterRole="worker"
           />
 
           <div className="form-group">

@@ -2,15 +2,37 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createSupabaseBrowserClient } from '@/lib/supabase/client'
-import { FileText, DollarSign, AlertTriangle, CheckCircle, Calendar, Shield } from 'lucide-react'
+import { FileText, DollarSign, AlertTriangle, CheckCircle, Calendar, Shield, Users } from 'lucide-react'
 
 const supabase = createSupabaseBrowserClient() as any
 const fmt = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(n)
 
 type Tab = 'sales_tax' | 'estimated' | 'annual' | '1099_tracker'
 
+interface TeamMember {
+  id: string
+  name: string
+  role: string
+  entity: string
+  status: string
+  pay_type: string
+  tax_status: string
+  documents_needed: string[]
+  documents_received: string[]
+}
+
+interface PayoutRecord {
+  id: string
+  date: string
+  client_name: string
+  total_revenue: number
+  worker_amount: number
+  sales_amount: number
+  calculation_details: any
+}
+
 export default function TaxPage() {
-  const [tab, setTab] = useState<Tab>('sales_tax')
+  const [tab, setTab] = useState<Tab>('1099_tracker')
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear())
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -19,38 +41,94 @@ export default function TaxPage() {
   const [salesTax, setSalesTax] = useState<any[]>([])
   const [estimatedTax, setEstimatedTax] = useState<any[]>([])
   const [annualTax, setAnnualTax] = useState<any[]>([])
-  const [contractors, setContractors] = useState<any[]>([])
-  const [contractorPayments, setContractorPayments] = useState<any[]>([])
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
+  const [payoutRecords, setPayoutRecords] = useState<PayoutRecord[]>([])
+  const [studioData, setStudioData] = useState<any>(null)
 
   // Forms
   const [salesTaxForm, setSalesTaxForm] = useState({ period_label: '', period_start: '', period_end: '', total_beat_sales: 0, in_taxable_sales: 0, out_of_state_sales: 0, gross_retail_sales_in: '', taxable_sales: '', tax_rate: '7.00', sales_tax_due: '' })
-  const [estTaxForm, setEstTaxForm] = useState({ quarter: 'Q1', tax_type: 'federal', partner_name: 'Jay', guaranteed_payments_ytd: '', ordinary_income_ytd: '', quarterly_payment_amount: '', payment_date: '', confirmation_number: '' })
+  const [estTaxForm, setEstTaxForm] = useState({ quarter: 'Q1', tax_type: 'federal', partner_name: 'Jay Mick', guaranteed_payments_ytd: '', ordinary_income_ytd: '', quarterly_payment_amount: '', payment_date: '', confirmation_number: '' })
 
   const fetchData = useCallback(async () => {
     setLoading(true)
-    const [stRes, etRes, atRes, cRes, cpRes] = await Promise.all([
+    const yearStart = `${selectedYear}-01-01`
+    const yearEnd = `${selectedYear}-12-31`
+
+    const [stRes, etRes, atRes, tmRes, prRes] = await Promise.all([
       supabase.from('sales_tax_filings').select('*').order('period_start', { ascending: false }),
       supabase.from('estimated_tax_payments').select('*').eq('tax_year', selectedYear).order('quarter'),
       supabase.from('annual_tax_filings').select('*').eq('tax_year', selectedYear).order('form_type'),
-      supabase.from('contractors').select('*').eq('active', true),
-      supabase.from('contractor_payments').select('*').gte('payment_date', `${selectedYear}-01-01`).lte('payment_date', `${selectedYear}-12-31`),
+      supabase.from('team_members').select('*').order('name'),
+      supabase.from('payout_records').select('*').gte('date', yearStart).lte('date', yearEnd).order('date', { ascending: false }),
     ])
+
+    // Fetch studio data for the year
+    const studioStart = new Date(selectedYear, 0, 1).toISOString()
+    const studioEnd = new Date(selectedYear, 11, 31, 23, 59, 59).toISOString()
+    const studioRes = await fetch(`/api/studio-revenue?start=${encodeURIComponent(studioStart)}&end=${encodeURIComponent(studioEnd)}`).then(r => r.json()).catch(() => null)
+
     setSalesTax(stRes.data || [])
     setEstimatedTax(etRes.data || [])
     setAnnualTax(atRes.data || [])
-    setContractors(cRes.data || [])
-    setContractorPayments(cpRes.data || [])
+    setTeamMembers(tmRes.data || [])
+    setPayoutRecords(prRes.data || [])
+    setStudioData(studioRes)
     setLoading(false)
   }, [selectedYear])
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  // Calculate 1099 data from contractor payments
-  const contractorYTD = contractors.map(c => {
-    const payments = contractorPayments.filter(p => p.contractor_id === c.id)
-    const total = payments.reduce((s: number, p: any) => s + (p.gross_payment || 0), 0)
-    return { ...c, ytd_total: total, needs_1099: total >= 2000, payment_count: payments.length }
-  }).sort((a, b) => b.ytd_total - a.ytd_total)
+  // Calculate YTD payouts per person from payout_records
+  function getPersonPayouts() {
+    const totals: Record<string, { media_worker: number; media_sales: number; studio: number; total: number }> = {}
+
+    const ensure = (name: string) => {
+      if (!totals[name]) totals[name] = { media_worker: 0, media_sales: 0, studio: 0, total: 0 }
+    }
+
+    // From payout_records workerBreakdown and salesBreakdown
+    payoutRecords.forEach(pr => {
+      const details = pr.calculation_details
+      if (details?.workerBreakdown) {
+        details.workerBreakdown.forEach((w: any) => {
+          ensure(w.name)
+          totals[w.name].media_worker += Number(w.amount || 0)
+          totals[w.name].total += Number(w.amount || 0)
+        })
+      }
+      if (details?.salesBreakdown) {
+        details.salesBreakdown.forEach((s: any) => {
+          ensure(s.name)
+          totals[s.name].media_sales += Number(s.amount || 0)
+          totals[s.name].total += Number(s.amount || 0)
+        })
+      }
+    })
+
+    // From studio data (engineer payouts)
+    if (studioData?.byEngineer) {
+      Object.entries(studioData.byEngineer).forEach(([name, data]: [string, any]) => {
+        ensure(name)
+        totals[name].studio += data.payout || 0
+        totals[name].total += data.payout || 0
+      })
+    }
+
+    return totals
+  }
+
+  const personPayouts = getPersonPayouts()
+
+  // Merge team members with their payout data
+  const teamWithPayouts = teamMembers.map(tm => {
+    const payouts = personPayouts[tm.name] || { media_worker: 0, media_sales: 0, studio: 0, total: 0 }
+    const needs1099 = tm.pay_type === '1099_contractor' && payouts.total >= 2000
+    const needsK1 = tm.pay_type === 'owner_draw'
+    return { ...tm, payouts, needs1099, needsK1 }
+  }).sort((a, b) => b.payouts.total - a.payouts.total)
+
+  // Owners for estimated tax
+  const owners = teamMembers.filter(tm => tm.role === 'owner')
 
   const handleSalesTaxSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -101,7 +179,8 @@ export default function TaxPage() {
   const totalSalesTaxDue = salesTax.reduce((s, t) => s + (t.net_tax_due || 0), 0)
   const totalSalesTaxPaid = salesTax.filter(t => t.filing_status === 'paid').reduce((s, t) => s + (t.net_tax_due || 0), 0)
   const totalEstPaid = estimatedTax.filter(t => t.status === 'paid').reduce((s, t) => s + (t.quarterly_payment_amount || 0), 0)
-  const contractors1099 = contractorYTD.filter(c => c.needs_1099).length
+  const contractors1099 = teamWithPayouts.filter(c => c.needs1099).length
+  const pendingW9s = teamMembers.filter(tm => tm.tax_status === 'w9_pending').length
 
   return (
     <div className="p-6 space-y-6">
@@ -116,7 +195,7 @@ export default function TaxPage() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <div className="stat-card">
           <div className="flex items-center gap-2 stat-card-title"><DollarSign className="h-4 w-4 text-[var(--warning)]" /> Sales Tax Due</div>
           <div className="stat-card-value">{fmt(totalSalesTaxDue - totalSalesTaxPaid)}</div>
@@ -133,17 +212,265 @@ export default function TaxPage() {
           <div className="flex items-center gap-2 stat-card-title"><Shield className="h-4 w-4 text-[var(--danger)]" /> 1099s Required</div>
           <div className="stat-card-value">{contractors1099}</div>
         </div>
+        <div className="stat-card">
+          <div className="flex items-center gap-2 stat-card-title"><Users className="h-4 w-4" style={{ color: pendingW9s > 0 ? 'var(--warning)' : 'var(--success)' }} /> Pending W-9s</div>
+          <div className="stat-card-value" style={{ color: pendingW9s > 0 ? 'var(--warning)' : 'var(--success)' }}>{pendingW9s}</div>
+        </div>
       </div>
 
       {/* Tabs */}
       <div className="tabs flex gap-1">
-        {([['sales_tax', 'Sales Tax (ST-103)'], ['estimated', 'Estimated Tax'], ['annual', 'Annual Filings'], ['1099_tracker', '1099 Tracker']] as [Tab, string][]).map(([key, label]) => (
+        {([['1099_tracker', '1099 / Payouts'], ['estimated', 'Estimated Tax'], ['sales_tax', 'Sales Tax (ST-103)'], ['annual', 'Annual Filings']] as [Tab, string][]).map(([key, label]) => (
           <button key={key} onClick={() => { setTab(key); setShowForm(false) }} className={`tab ${tab === key ? 'tab-active' : ''}`}>{label}</button>
         ))}
       </div>
 
       {loading ? <div className="text-center py-12 text-[var(--muted)]">Loading...</div> : (
         <>
+          {/* 1099 / Payouts Tracker Tab */}
+          {tab === '1099_tracker' && (
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <p className="text-sm" style={{ color: 'var(--muted)' }}>
+                  YTD payouts per person across media jobs and studio sessions. 1099-NEC required for contractors paid ≥ $2,000.
+                </p>
+                <div className="flex items-center gap-2">
+                  {contractors1099 > 0 && <span className="badge badge-danger">{contractors1099} require 1099</span>}
+                  {pendingW9s > 0 && <span className="badge badge-warning">{pendingW9s} W-9 pending</span>}
+                </div>
+              </div>
+
+              {/* Owner Section */}
+              {teamWithPayouts.filter(t => t.role === 'owner').length > 0 && (
+                <div className="card">
+                  <div className="p-4 border-b border-[var(--border)]">
+                    <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Owners (K-1 Recipients)</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4">
+                    {teamWithPayouts.filter(t => t.role === 'owner').map(person => (
+                      <div key={person.id} className="rounded-xl p-5" style={{ backgroundColor: 'var(--surface-hover)', border: '1px solid var(--border)' }}>
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h4 className="font-bold text-lg" style={{ color: 'var(--foreground)' }}>{person.name}</h4>
+                            <span className="text-xs px-2 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(168, 85, 247, 0.1)', color: '#a855f7' }}>Owner / K-1</span>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-2xl font-bold" style={{ color: 'var(--accent)' }}>{fmt(person.payouts.total)}</p>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>YTD Total</p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 text-sm">
+                          <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--surface)' }}>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>Media (Worker)</p>
+                            <p className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmt(person.payouts.media_worker)}</p>
+                          </div>
+                          <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--surface)' }}>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>Media (Sales)</p>
+                            <p className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmt(person.payouts.media_sales)}</p>
+                          </div>
+                          <div className="rounded-lg p-3" style={{ backgroundColor: 'var(--surface)' }}>
+                            <p className="text-xs" style={{ color: 'var(--muted)' }}>Studio</p>
+                            <p className="font-semibold" style={{ color: 'var(--foreground)' }}>{fmt(person.payouts.studio)}</p>
+                          </div>
+                        </div>
+                        <div className="mt-3 flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
+                          <span>Needs: Schedule K-1, Schedule SE</span>
+                          {estimatedTax.filter(e => e.partner_name === person.name.split(' ')[0] || e.partner_name === person.name).length > 0 && (
+                            <span className="badge badge-info">Est. tax on file</span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Contractors / Engineers Section */}
+              <div className="card">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Contractors & Engineers (1099 Recipients)</h3>
+                </div>
+                <div className="table-container">
+                  <table className="table w-full">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>Role</th>
+                        <th>Entity</th>
+                        <th className="text-right">Media Worker</th>
+                        <th className="text-right">Media Sales</th>
+                        <th className="text-right">Studio</th>
+                        <th className="text-right">YTD Total</th>
+                        <th>W-9</th>
+                        <th>1099</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teamWithPayouts.filter(t => t.role !== 'owner').length === 0 ? (
+                        <tr><td colSpan={9} className="text-center text-[var(--muted)] py-8">No contractors or engineers</td></tr>
+                      ) : (
+                        teamWithPayouts.filter(t => t.role !== 'owner').map(person => (
+                          <tr key={person.id} style={person.needs1099 ? { backgroundColor: 'rgba(239, 68, 68, 0.05)' } : undefined}>
+                            <td className="font-medium" style={{ color: 'var(--foreground)' }}>{person.name}</td>
+                            <td>
+                              <span className={`badge text-xs ${
+                                person.role === 'engineer' ? 'badge-info' :
+                                person.role === 'sales' ? 'badge-success' :
+                                'badge-gray'
+                              }`}>
+                                {person.role}
+                              </span>
+                            </td>
+                            <td className="text-xs" style={{ color: 'var(--muted)' }}>
+                              {person.entity === 'sweet_dreams_us' ? 'SD US' :
+                               person.entity === 'sweet_dreams_music' ? 'SD Music' : 'Both'}
+                            </td>
+                            <td className="text-right">{person.payouts.media_worker > 0 ? fmt(person.payouts.media_worker) : '—'}</td>
+                            <td className="text-right">{person.payouts.media_sales > 0 ? fmt(person.payouts.media_sales) : '—'}</td>
+                            <td className="text-right">{person.payouts.studio > 0 ? fmt(person.payouts.studio) : '—'}</td>
+                            <td className="text-right font-semibold" style={{ color: person.payouts.total > 0 ? 'var(--foreground)' : 'var(--muted)' }}>
+                              {fmt(person.payouts.total)}
+                            </td>
+                            <td>
+                              {person.tax_status === 'w9_received' || person.documents_received?.includes('W-9') ? (
+                                <CheckCircle className="h-4 w-4 text-[var(--success)]" />
+                              ) : (
+                                <AlertTriangle className="h-4 w-4 text-[var(--danger)]" />
+                              )}
+                            </td>
+                            <td>
+                              {person.needs1099 ? (
+                                <span className="badge badge-danger">Required</span>
+                              ) : person.payouts.total > 0 ? (
+                                <span className="badge badge-gray">Below $2K</span>
+                              ) : (
+                                <span className="badge badge-gray">No payouts</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Payout Detail by Job */}
+              <div className="card">
+                <div className="p-4 border-b border-[var(--border)]">
+                  <h3 className="font-semibold" style={{ color: 'var(--foreground)' }}>Media Payout Detail ({selectedYear})</h3>
+                </div>
+                <div className="table-container">
+                  <table className="table w-full">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Client</th>
+                        <th className="text-right">Revenue</th>
+                        <th>Workers</th>
+                        <th>Sales</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {payoutRecords.length === 0 ? (
+                        <tr><td colSpan={5} className="text-center text-[var(--muted)] py-8">No payout records for {selectedYear}</td></tr>
+                      ) : (
+                        payoutRecords.map(pr => {
+                          const workers = pr.calculation_details?.workerBreakdown || []
+                          const sales = pr.calculation_details?.salesBreakdown || []
+                          return (
+                            <tr key={pr.id}>
+                              <td className="whitespace-nowrap">{pr.date}</td>
+                              <td className="font-medium" style={{ color: 'var(--foreground)' }}>{pr.client_name}</td>
+                              <td className="text-right">{fmt(pr.total_revenue)}</td>
+                              <td className="text-xs">
+                                {workers.map((w: any, i: number) => (
+                                  <span key={i} className="inline-block mr-2">
+                                    {w.name} <span style={{ color: 'var(--accent)' }}>{fmt(w.amount)}</span>
+                                  </span>
+                                ))}
+                              </td>
+                              <td className="text-xs">
+                                {sales.length > 0 ? sales.map((s: any, i: number) => (
+                                  <span key={i} className="inline-block mr-2">
+                                    {s.name} <span style={{ color: 'var(--success)' }}>{fmt(s.amount)}</span>
+                                  </span>
+                                )) : <span style={{ color: 'var(--muted)' }}>—</span>}
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Estimated Tax Tab */}
+          {tab === 'estimated' && (
+            <div className="space-y-4">
+              <div className="flex justify-end">
+                <button onClick={() => setShowForm(!showForm)} className="btn-primary btn">{showForm ? 'Cancel' : 'Add/Update Payment'}</button>
+              </div>
+              {showForm && (
+                <form onSubmit={handleEstTaxSubmit} className="card p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div><label className="label">Quarter</label><select value={estTaxForm.quarter} onChange={e => setEstTaxForm({...estTaxForm, quarter: e.target.value})} className="input">{['Q1','Q2','Q3','Q4'].map(q => <option key={q} value={q}>{q}</option>)}</select></div>
+                  <div><label className="label">Type</label><select value={estTaxForm.tax_type} onChange={e => setEstTaxForm({...estTaxForm, tax_type: e.target.value})} className="input"><option value="federal">Federal</option><option value="indiana">Indiana</option></select></div>
+                  <div><label className="label">Partner</label>
+                    <select value={estTaxForm.partner_name} onChange={e => setEstTaxForm({...estTaxForm, partner_name: e.target.value})} className="input">
+                      {owners.map(o => <option key={o.id} value={o.name}>{o.name}</option>)}
+                      {owners.length === 0 && <><option value="Jay Mick">Jay Mick</option><option value="Cole Marcuccilli">Cole Marcuccilli</option></>}
+                    </select>
+                  </div>
+                  <div><label className="label">GP YTD</label><input type="number" step="0.01" value={estTaxForm.guaranteed_payments_ytd} onChange={e => setEstTaxForm({...estTaxForm, guaranteed_payments_ytd: e.target.value})} className="input" /></div>
+                  <div><label className="label">OI YTD</label><input type="number" step="0.01" value={estTaxForm.ordinary_income_ytd} onChange={e => setEstTaxForm({...estTaxForm, ordinary_income_ytd: e.target.value})} className="input" /></div>
+                  <div><label className="label">Payment Amount</label><input type="number" step="0.01" value={estTaxForm.quarterly_payment_amount} onChange={e => setEstTaxForm({...estTaxForm, quarterly_payment_amount: e.target.value})} className="input" required /></div>
+                  <div><label className="label">Payment Date</label><input type="date" value={estTaxForm.payment_date} onChange={e => setEstTaxForm({...estTaxForm, payment_date: e.target.value})} className="input" /></div>
+                  <div className="flex items-end"><button type="submit" className="btn-primary btn w-full">Save</button></div>
+                </form>
+              )}
+
+              {/* Per-owner section with YTD earnings context */}
+              {owners.map(owner => {
+                const partnerData = estimatedTax.filter(e => e.partner_name === owner.name || e.partner_name === owner.name.split(' ')[0])
+                const ownerPayouts = personPayouts[owner.name] || { media_worker: 0, media_sales: 0, studio: 0, total: 0 }
+                return (
+                  <div key={owner.id} className="card p-6">
+                    <div className="flex items-center justify-between mb-4">
+                      <h3 className="text-lg font-bold" style={{ color: 'var(--foreground)' }}>{owner.name}&apos;s Estimated Tax</h3>
+                      <div className="text-right">
+                        <p className="text-sm" style={{ color: 'var(--muted)' }}>YTD Earnings</p>
+                        <p className="text-lg font-bold" style={{ color: 'var(--accent)' }}>{fmt(ownerPayouts.total)}</p>
+                      </div>
+                    </div>
+                    <div className="table-container">
+                      <table className="table w-full">
+                        <thead><tr><th>Quarter</th><th>Type</th><th className="text-right">GP YTD</th><th className="text-right">OI YTD</th><th className="text-right">Payment</th><th>Date</th><th>Status</th></tr></thead>
+                        <tbody>
+                          {partnerData.length === 0 ? <tr><td colSpan={7} className="text-center text-[var(--muted)] py-4">No payments recorded</td></tr> :
+                            partnerData.map(e => (
+                              <tr key={e.id}>
+                                <td className="font-medium">{e.quarter}</td>
+                                <td className="capitalize">{e.tax_type}</td>
+                                <td className="text-right">{fmt(e.guaranteed_payments_ytd)}</td>
+                                <td className="text-right">{fmt(e.ordinary_income_ytd)}</td>
+                                <td className="text-right font-medium">{fmt(e.quarterly_payment_amount)}</td>
+                                <td>{e.payment_date || '—'}</td>
+                                <td><span className={`badge ${e.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{e.status}</span></td>
+                              </tr>
+                            ))
+                          }
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
           {/* Sales Tax Tab */}
           {tab === 'sales_tax' && (
             <div className="space-y-4">
@@ -178,56 +505,6 @@ export default function TaxPage() {
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-
-          {/* Estimated Tax Tab */}
-          {tab === 'estimated' && (
-            <div className="space-y-4">
-              <div className="flex justify-end">
-                <button onClick={() => setShowForm(!showForm)} className="btn-primary btn">{showForm ? 'Cancel' : 'Add/Update Payment'}</button>
-              </div>
-              {showForm && (
-                <form onSubmit={handleEstTaxSubmit} className="card p-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div><label className="label">Quarter</label><select value={estTaxForm.quarter} onChange={e => setEstTaxForm({...estTaxForm, quarter: e.target.value})} className="input">{['Q1','Q2','Q3','Q4'].map(q => <option key={q} value={q}>{q}</option>)}</select></div>
-                  <div><label className="label">Type</label><select value={estTaxForm.tax_type} onChange={e => setEstTaxForm({...estTaxForm, tax_type: e.target.value})} className="input"><option value="federal">Federal</option><option value="indiana">Indiana</option></select></div>
-                  <div><label className="label">Partner</label><select value={estTaxForm.partner_name} onChange={e => setEstTaxForm({...estTaxForm, partner_name: e.target.value})} className="input"><option value="Jay">Jay</option><option value="Cole">Cole</option></select></div>
-                  <div><label className="label">GP YTD</label><input type="number" step="0.01" value={estTaxForm.guaranteed_payments_ytd} onChange={e => setEstTaxForm({...estTaxForm, guaranteed_payments_ytd: e.target.value})} className="input" /></div>
-                  <div><label className="label">OI YTD</label><input type="number" step="0.01" value={estTaxForm.ordinary_income_ytd} onChange={e => setEstTaxForm({...estTaxForm, ordinary_income_ytd: e.target.value})} className="input" /></div>
-                  <div><label className="label">Payment Amount</label><input type="number" step="0.01" value={estTaxForm.quarterly_payment_amount} onChange={e => setEstTaxForm({...estTaxForm, quarterly_payment_amount: e.target.value})} className="input" required /></div>
-                  <div><label className="label">Payment Date</label><input type="date" value={estTaxForm.payment_date} onChange={e => setEstTaxForm({...estTaxForm, payment_date: e.target.value})} className="input" /></div>
-                  <div className="flex items-end"><button type="submit" className="btn-primary btn w-full">Save</button></div>
-                </form>
-              )}
-              {/* Jay and Cole sections */}
-              {['Jay', 'Cole'].map(partner => {
-                const partnerData = estimatedTax.filter(e => e.partner_name === partner)
-                return (
-                  <div key={partner} className="card p-6">
-                    <h3 className="text-lg font-bold mb-4" style={{ color: 'var(--foreground)' }}>{partner}&apos;s Estimated Tax</h3>
-                    <div className="table-container">
-                      <table className="table w-full">
-                        <thead><tr><th>Quarter</th><th>Type</th><th className="text-right">GP YTD</th><th className="text-right">OI YTD</th><th className="text-right">Payment</th><th>Date</th><th>Status</th></tr></thead>
-                        <tbody>
-                          {partnerData.length === 0 ? <tr><td colSpan={7} className="text-center text-[var(--muted)] py-4">No payments recorded</td></tr> :
-                            partnerData.map(e => (
-                              <tr key={e.id}>
-                                <td className="font-medium">{e.quarter}</td>
-                                <td className="capitalize">{e.tax_type}</td>
-                                <td className="text-right">{fmt(e.guaranteed_payments_ytd)}</td>
-                                <td className="text-right">{fmt(e.ordinary_income_ytd)}</td>
-                                <td className="text-right font-medium">{fmt(e.quarterly_payment_amount)}</td>
-                                <td>{e.payment_date || '—'}</td>
-                                <td><span className={`badge ${e.status === 'paid' ? 'badge-success' : 'badge-warning'}`}>{e.status}</span></td>
-                              </tr>
-                            ))
-                          }
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                )
-              })}
             </div>
           )}
 
@@ -277,39 +554,6 @@ export default function TaxPage() {
                     </div>
                   )
                 })}
-              </div>
-            </div>
-          )}
-
-          {/* 1099 Tracker Tab */}
-          {tab === '1099_tracker' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <p className="text-sm" style={{ color: 'var(--muted)' }}>1099-NEC required for contractors paid ≥ $2,000 (2026 threshold per One Big Beautiful Bill Act)</p>
-                <div className="flex items-center gap-2">
-                  <span className="badge badge-danger">{contractors1099} require 1099</span>
-                  <span className="badge badge-gray">{contractorYTD.filter(c => !c.needs_1099).length} below threshold</span>
-                </div>
-              </div>
-              <div className="table-container">
-                <table className="table w-full">
-                  <thead><tr><th>Contractor</th><th>Type</th><th className="text-right">YTD Total</th><th className="text-right">Payments</th><th>W-9</th><th>IC Agreement</th><th>1099 Required</th></tr></thead>
-                  <tbody>
-                    {contractorYTD.length === 0 ? <tr><td colSpan={7} className="text-center text-[var(--muted)] py-8">No contractors found</td></tr> :
-                      contractorYTD.map(c => (
-                        <tr key={c.id} style={c.needs_1099 ? { backgroundColor: 'rgba(239, 68, 68, 0.05)' } : undefined}>
-                          <td className="font-medium">{c.display_name}<br /><span className="text-xs" style={{ color: 'var(--muted)' }}>{c.legal_name}</span></td>
-                          <td className="capitalize">{c.contractor_type.replace('_', ' ')}</td>
-                          <td className="text-right font-medium">{fmt(c.ytd_total)}</td>
-                          <td className="text-right">{c.payment_count}</td>
-                          <td>{c.w9_on_file ? <CheckCircle className="h-4 w-4 text-[var(--success)]" /> : <AlertTriangle className="h-4 w-4 text-[var(--danger)]" />}</td>
-                          <td>{c.ic_agreement_on_file ? <CheckCircle className="h-4 w-4 text-[var(--success)]" /> : <AlertTriangle className="h-4 w-4 text-[var(--danger)]" />}</td>
-                          <td>{c.needs_1099 ? <span className="badge badge-danger">Required</span> : <span className="badge badge-gray">No</span>}</td>
-                        </tr>
-                      ))
-                    }
-                  </tbody>
-                </table>
               </div>
             </div>
           )}

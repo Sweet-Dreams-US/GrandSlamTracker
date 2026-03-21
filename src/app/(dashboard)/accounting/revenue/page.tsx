@@ -77,6 +77,7 @@ export default function RevenuePage() {
   const [showForm, setShowForm] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const [teamMembers, setTeamMembers] = useState<{ id: string; name: string; role: string; entity: string }[]>([])
   const [mediaProjects, setMediaProjects] = useState<any[]>([])
   const [studioSessions, setStudioSessions] = useState<any[]>([])
   const [beatSales, setBeatSales] = useState<any[]>([])
@@ -110,6 +111,11 @@ export default function RevenuePage() {
       if (mediaRes.data) setMediaProjects(mediaRes.data)
       if (studioApiRes.sessions) setStudioSessions(studioApiRes.sessions)
       if (beatsRes.data) setBeatSales(beatsRes.data)
+
+      // Fetch team members for dropdowns
+      const { data: tmData } = await (supabase.from('team_members') as any).select('id, name, role, entity').eq('status', 'active')
+      if (tmData) setTeamMembers(tmData)
+
       setLoading(false)
     }
     load()
@@ -370,17 +376,23 @@ export default function RevenuePage() {
                 <div className="space-y-2">
                   {mediaForm.workers.map((w, i) => (
                     <div key={i} className="flex items-center gap-2">
-                      <input
-                        type="text"
+                      <select
                         className="input flex-1"
-                        placeholder="Name (e.g. Cole, Jay)"
                         value={w.name}
                         onChange={(e) => {
                           const updated = [...mediaForm.workers]
                           updated[i] = { ...updated[i], name: e.target.value }
                           setMediaForm({ ...mediaForm, workers: updated })
                         }}
-                      />
+                      >
+                        <option value="">Select person...</option>
+                        {teamMembers
+                          .filter((m) => ['owner', 'worker', 'contractor'].includes(m.role) && ['sweet_dreams_us', 'both'].includes(m.entity))
+                          .map((m) => (
+                            <option key={m.id} value={m.name}>{m.name}</option>
+                          ))
+                        }
+                      </select>
                       <div className="flex items-center gap-1">
                         <input
                           type="number"
@@ -459,17 +471,23 @@ export default function RevenuePage() {
                   <div className="space-y-2">
                     {mediaForm.salesPeople.map((s, i) => (
                       <div key={i} className="flex items-center gap-2">
-                        <input
-                          type="text"
+                        <select
                           className="input flex-1"
-                          placeholder="Salesperson name"
                           value={s.name}
                           onChange={(e) => {
                             const updated = [...mediaForm.salesPeople]
                             updated[i] = { ...updated[i], name: e.target.value }
                             setMediaForm({ ...mediaForm, salesPeople: updated })
                           }}
-                        />
+                        >
+                          <option value="">Select person...</option>
+                          {teamMembers
+                            .filter((m) => ['owner', 'sales'].includes(m.role) && ['sweet_dreams_us', 'both'].includes(m.entity))
+                            .map((m) => (
+                              <option key={m.id} value={m.name}>{m.name}</option>
+                            ))
+                          }
+                        </select>
                         <div className="flex items-center gap-1">
                           <input
                             type="number"
