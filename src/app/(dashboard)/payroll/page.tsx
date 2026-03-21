@@ -53,6 +53,7 @@ interface Contractor {
 }
 
 export default function PayrollDashboard() {
+  const [payoutRecords, setPayoutRecords] = useState<any[]>([])
   const [contractorPayments, setContractorPayments] = useState<ContractorPayment[]>([])
   const [ownerPayments, setOwnerPayments] = useState<OwnerPayment[]>([])
   const [contractors, setContractors] = useState<Contractor[]>([])
@@ -64,7 +65,11 @@ export default function PayrollDashboard() {
       const now = new Date()
       const monthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`
 
-      const [cpRes, opRes, cRes] = await Promise.all([
+      const [prRes, cpRes, opRes, cRes] = await Promise.all([
+        (supabase.from('payout_records') as any)
+          .select('*')
+          .gte('date', monthStart)
+          .order('date', { ascending: false }),
         (supabase.from('contractor_payments') as any)
           .select('*, contractors(name)')
           .gte('date', monthStart)
@@ -77,6 +82,7 @@ export default function PayrollDashboard() {
           .select('*'),
       ])
 
+      if (prRes.data) setPayoutRecords(prRes.data)
       if (cpRes.data) setContractorPayments(cpRes.data)
       if (opRes.data) setOwnerPayments(opRes.data)
       if (cRes.data) setContractors(cRes.data)
@@ -85,12 +91,47 @@ export default function PayrollDashboard() {
     load()
   }, [])
 
+  // Derive worker/sales payouts from payout_records
+  const workerPayoutsMTD = payoutRecords.reduce((s, p) => s + Number(p.worker_amount || 0), 0)
+  const salesPayoutsMTD = payoutRecords.reduce((s, p) => s + Number(p.sales_amount || 0), 0)
   const totalContractorMTD = contractorPayments.reduce((s, p) => s + Number(p.amount), 0)
   const totalOwnerMTD = ownerPayments.reduce((s, p) => s + Number(p.amount), 0)
-  const totalPayoutsMTD = totalContractorMTD + totalOwnerMTD
+  const totalPayoutsMTD = workerPayoutsMTD + salesPayoutsMTD + totalContractorMTD + totalOwnerMTD
   const activeContractors = contractors.filter((c) => c.status === 'active').length
 
+  // Build recent payouts from payout_records (worker breakdowns)
+  const payoutRecordEntries = payoutRecords.flatMap((p: any) => {
+    const details = p.calculation_details
+    const entries: any[] = []
+    if (details?.workerBreakdown) {
+      details.workerBreakdown.forEach((w: any) => {
+        entries.push({
+          id: `${p.id}-w-${w.name}`,
+          date: p.date,
+          recipient: w.name,
+          type: 'worker' as const,
+          amount: Number(w.amount || 0),
+          label: `${p.client_name} (worker ${w.percent}%)`,
+        })
+      })
+    }
+    if (details?.salesBreakdown) {
+      details.salesBreakdown.forEach((s: any) => {
+        entries.push({
+          id: `${p.id}-s-${s.name}`,
+          date: p.date,
+          recipient: s.name,
+          type: 'sales' as const,
+          amount: Number(s.amount || 0),
+          label: `${p.client_name} (sales ${s.percent}%)`,
+        })
+      })
+    }
+    return entries
+  })
+
   const recentPayouts = [
+    ...payoutRecordEntries,
     ...contractorPayments.slice(0, 5).map((p) => ({
       id: p.id,
       date: p.date,
@@ -109,7 +150,7 @@ export default function PayrollDashboard() {
     })),
   ]
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 10)
+    .slice(0, 15)
 
   const quickLinks = [
     { href: '/payroll/contractors', label: 'Manage Contractors', icon: Users, description: 'Roster, W-9s, agreements' },
@@ -137,14 +178,14 @@ export default function PayrollDashboard() {
           icon={DollarSign}
         />
         <SummaryCard
-          title="Contractor Payments (MTD)"
-          value={totalContractorMTD}
+          title="Worker Payouts (MTD)"
+          value={workerPayoutsMTD}
           format="currency"
           icon={Wallet}
         />
         <SummaryCard
-          title="Owner Draws (MTD)"
-          value={totalOwnerMTD}
+          title="Sales Commissions (MTD)"
+          value={salesPayoutsMTD}
           format="currency"
           icon={Briefcase}
         />
@@ -208,13 +249,16 @@ export default function PayrollDashboard() {
                     <td>
                       <span
                         className={`badge text-xs ${
-                          p.type === 'owner' ? 'badge-warning' : 'badge-info'
+                          p.type === 'owner' ? 'badge-warning' :
+                          p.type === 'worker' ? 'badge-info' :
+                          p.type === 'sales' ? 'badge-success' :
+                          'badge-gray'
                         }`}
                       >
-                        {p.type === 'owner' ? 'Owner Draw' : 'Contractor'}
+                        {p.type === 'owner' ? 'Owner Draw' : p.type === 'worker' ? 'Worker' : p.type === 'sales' ? 'Sales' : 'Contractor'}
                       </span>
                     </td>
-                    <td className="text-gray-400 capitalize">{p.label.replace(/_/g, ' ')}</td>
+                    <td className="text-gray-400 capitalize">{(p.label || '').replace(/_/g, ' ')}</td>
                     <td className="text-right font-medium text-white">{fmt(p.amount)}</td>
                   </tr>
                 ))}

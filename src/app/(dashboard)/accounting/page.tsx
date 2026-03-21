@@ -47,18 +47,17 @@ export default function AccountingDashboard() {
       const supabase = createSupabaseBrowserClient()
       const now = new Date()
       const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+      const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
 
-      const [mediaRes, studioRes, beatsRes, expRes, invRes] = await Promise.all([
-        (supabase.from('media_projects') as any).select('*').gte('created_at', monthStart),
-        (supabase.from('acct_studio_sessions') as any).select('*').gte('date', monthStart),
-        (supabase.from('beat_sales') as any).select('*').gte('date', monthStart),
+      const [payoutRes, expRes, invRes, studioApiRes] = await Promise.all([
+        (supabase.from('payout_records') as any).select('*').gte('date', monthStart.split('T')[0]).order('date', { ascending: false }),
         (supabase.from('expenses') as any).select('*').gte('date', monthStart),
         (supabase.from('invoices') as any).select('*'),
+        fetch(`/api/studio-revenue?start=${encodeURIComponent(monthStart)}&end=${encodeURIComponent(monthEnd)}`).then(r => r.json()).catch(() => ({ sessions: [] })),
       ])
 
-      if (mediaRes.data) setMediaProjects(mediaRes.data)
-      if (studioRes.data) setStudioSessions(studioRes.data)
-      if (beatsRes.data) setBeatSales(beatsRes.data)
+      if (payoutRes.data) setMediaProjects(payoutRes.data)
+      if (studioApiRes.sessions) setStudioSessions(studioApiRes.sessions)
       if (expRes.data) setExpenses(expRes.data)
       if (invRes.data) setInvoices(invRes.data)
       setLoading(false)
@@ -67,20 +66,15 @@ export default function AccountingDashboard() {
   }, [])
 
   // MTD Calculations
-  const mediaRevenue = mediaProjects.reduce((s, p) => s + Number(p.gross_revenue || 0), 0)
+  const mediaRevenue = mediaProjects.reduce((s, p) => s + Number(p.total_revenue || 0), 0)
   const studioRevenue = studioSessions.reduce((s, p) => s + Number(p.billed || 0), 0)
   const beatRevenue = beatSales.reduce((s, p) => s + Number(p.price || 0), 0)
   const totalRevenue = mediaRevenue + studioRevenue + beatRevenue
   const totalExpenses = expenses.reduce((s, e) => s + Number(e.amount || 0), 0)
   const netIncome = totalRevenue - totalExpenses
 
-  // Business fund: tiered media splits + business retention from studio & beats
-  const mediaBusinessCut = mediaProjects.reduce((s, p) => {
-    const gross = Number(p.gross_revenue || 0)
-    // Use stored business_cut if available, otherwise calculate from tiered split
-    if (p.business_cut != null) return s + Number(p.business_cut)
-    return s + calculateMediaSplit(gross, false).businessAmount
-  }, 0)
+  // Business fund: business_amount from payout_records + business retention from studio
+  const mediaBusinessCut = mediaProjects.reduce((s, p) => s + Number(p.business_amount || 0), 0)
   const businessFund =
     mediaBusinessCut +
     studioSessions.reduce((s, p) => s + Number(p.business_retention || 0), 0) +
@@ -94,9 +88,9 @@ export default function AccountingDashboard() {
   const allTransactions: Transaction[] = [
     ...mediaProjects.map((p: any) => ({
       id: `m-${p.id}`,
-      date: p.created_at,
-      description: `Media: ${p.client || p.project_name || 'Project'}`,
-      amount: Number(p.gross_revenue || 0),
+      date: p.date || p.created_at,
+      description: `Media: ${p.client_name || 'Project'}`,
+      amount: Number(p.total_revenue || 0),
       type: 'revenue' as const,
       stream: 'media',
     })),

@@ -87,21 +87,21 @@ export default function RevenuePage() {
       const start = new Date(year, month - 1, 1).toISOString()
       const end = new Date(year, month, 0, 23, 59, 59).toISOString()
 
-      const [mediaRes, studioRes, beatsRes] = await Promise.all([
-        (supabase.from('media_projects') as any).select('*').gte('created_at', start).lte('created_at', end).order('created_at', { ascending: false }),
-        (supabase.from('acct_studio_sessions') as any).select('*').gte('date', start).lte('date', end).order('date', { ascending: false }),
+      const [mediaRes, beatsRes, studioApiRes] = await Promise.all([
+        (supabase.from('payout_records') as any).select('*').gte('date', start.split('T')[0]).lte('date', end.split('T')[0]).order('date', { ascending: false }),
         (supabase.from('beat_sales') as any).select('*').gte('date', start).lte('date', end).order('date', { ascending: false }),
+        fetch(`/api/studio-revenue?start=${encodeURIComponent(start)}&end=${encodeURIComponent(end)}`).then(r => r.json()).catch(() => ({ sessions: [] })),
       ])
 
       if (mediaRes.data) setMediaProjects(mediaRes.data)
-      if (studioRes.data) setStudioSessions(studioRes.data)
+      if (studioApiRes.sessions) setStudioSessions(studioApiRes.sessions)
       if (beatsRes.data) setBeatSales(beatsRes.data)
       setLoading(false)
     }
     load()
   }, [selectedMonth])
 
-  const mediaTotal = mediaProjects.reduce((s, p) => s + Number(p.gross_revenue || 0), 0)
+  const mediaTotal = mediaProjects.reduce((s, p) => s + Number(p.total_revenue || 0), 0)
   const studioTotal = studioSessions.reduce((s, p) => s + Number(p.billed || 0), 0)
   const beatTotal = beatSales.reduce((s, p) => s + Number(p.price || 0), 0)
 
@@ -110,19 +110,18 @@ export default function RevenuePage() {
     setSubmitting(true)
     const supabase = createSupabaseBrowserClient()
     const gross = Number(mediaForm.gross_revenue)
-    const split = calculateMediaSplit(gross, false) // currently 0 salespeople
+    const split = calculateMediaSplit(gross, false)
     const row = {
-      created_at: new Date(mediaForm.date).toISOString(),
-      client: mediaForm.client,
-      type: mediaForm.type,
-      gross_revenue: gross,
-      business_cut: split.businessAmount,
-      labor_pool: split.workerAmount,
-      sales_cut: split.salesAmount,
-      tier_label: split.tier.label,
-      status: mediaForm.status,
+      date: mediaForm.date,
+      deal_type: 'transactional',
+      client_name: mediaForm.client,
+      total_revenue: gross,
+      business_amount: split.businessAmount,
+      sales_amount: split.salesAmount,
+      worker_amount: split.workerAmount,
+      tier_used: split.tier.label,
     }
-    const { data } = await (supabase.from('media_projects') as any).insert(row).select().single()
+    const { data } = await (supabase.from('payout_records') as any).insert(row).select().single()
     if (data) setMediaProjects((prev) => [data, ...prev])
     setMediaForm({ ...emptyMedia })
     setShowForm(false)
@@ -427,42 +426,27 @@ export default function RevenuePage() {
                   <th>Type</th>
                   <th>Gross Revenue</th>
                   <th>Tier</th>
-                  <th>Business Cut</th>
-                  <th>Worker Pool</th>
-                  <th>Status</th>
+                  <th>Business</th>
+                  <th>Sales</th>
+                  <th>Workers</th>
                 </tr>
               </thead>
               <tbody>
                 {mediaProjects.length === 0 ? (
                   <tr><td colSpan={8} className="text-center py-8" style={{ color: 'var(--muted)' }}>No media projects this month</td></tr>
                 ) : (
-                  mediaProjects.map((p: any) => {
-                    const gross = Number(p.gross_revenue || 0)
-                    const split = calculateMediaSplit(gross, false)
-                    const businessCut = p.business_cut != null ? Number(p.business_cut) : split.businessAmount
-                    const workerPool = p.labor_pool != null ? Number(p.labor_pool) : split.workerAmount
-                    const tierLabel = p.tier_label || split.tier.label
-                    return (
-                      <tr key={p.id}>
-                        <td>{fmtDate(p.created_at)}</td>
-                        <td className="font-medium">{p.client || '-'}</td>
-                        <td><span className="badge-info capitalize">{p.type || '-'}</span></td>
-                        <td className="font-medium">{fmt(gross)}</td>
-                        <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{tierLabel}</span></td>
-                        <td>{fmt(businessCut)}</td>
-                        <td>{fmt(workerPool)}</td>
-                        <td>
-                          <span className={
-                            p.status === 'completed' ? 'badge-success' :
-                            p.status === 'in_progress' ? 'badge-warning' :
-                            'badge-gray'
-                          }>
-                            {p.status || 'pending'}
-                          </span>
-                        </td>
-                      </tr>
-                    )
-                  })
+                  mediaProjects.map((p: any) => (
+                    <tr key={p.id}>
+                      <td>{fmtDate(p.date || p.created_at)}</td>
+                      <td className="font-medium">{p.client_name || '-'}</td>
+                      <td><span className="badge-info capitalize">{p.deal_type?.replace('_', ' ') || '-'}</span></td>
+                      <td className="font-medium">{fmt(Number(p.total_revenue || 0))}</td>
+                      <td><span className="text-xs" style={{ color: 'var(--muted)' }}>{p.tier_used || '-'}</span></td>
+                      <td style={{ color: 'var(--success)' }}>{fmt(Number(p.business_amount || 0))}</td>
+                      <td style={{ color: 'var(--accent)' }}>{fmt(Number(p.sales_amount || 0))}</td>
+                      <td style={{ color: 'var(--warning)' }}>{fmt(Number(p.worker_amount || 0))}</td>
+                    </tr>
+                  ))
                 )}
               </tbody>
             </table>
@@ -475,12 +459,12 @@ export default function RevenuePage() {
                   <th>Date</th>
                   <th>Engineer</th>
                   <th>Artist</th>
-                  <th>Type</th>
+                  <th>Room</th>
                   <th>Hours</th>
-                  <th>Rate</th>
                   <th>Billed</th>
-                  <th>Eng. Payout</th>
-                  <th>Business</th>
+                  <th>Eng. Payout (60%)</th>
+                  <th>Business (40%)</th>
+                  <th>Source</th>
                 </tr>
               </thead>
               <tbody>
@@ -492,12 +476,18 @@ export default function RevenuePage() {
                       <td>{fmtDate(s.date)}</td>
                       <td className="font-medium">{s.engineer || '-'}</td>
                       <td>{s.artist || '-'}</td>
-                      <td><span className="badge-info capitalize">{s.type || '-'}</span></td>
+                      <td><span className="badge-info capitalize text-xs">{(s.room || '-').replace('_', ' ')}</span></td>
                       <td>{s.hours}h</td>
-                      <td>{fmt(Number(s.rate || 0))}/hr</td>
                       <td className="font-medium">{fmt(Number(s.billed || 0))}</td>
                       <td style={{ color: 'var(--warning)' }}>{fmt(Number(s.engineer_payout || 0))}</td>
                       <td style={{ color: 'var(--success)' }}>{fmt(Number(s.business_retention || 0))}</td>
+                      <td>
+                        {s.source === 'sweet_dreams_music' ? (
+                          <span className="badge-success text-xs">Music Site</span>
+                        ) : (
+                          <span className="badge-gray text-xs">Manual</span>
+                        )}
+                      </td>
                     </tr>
                   ))
                 )}
