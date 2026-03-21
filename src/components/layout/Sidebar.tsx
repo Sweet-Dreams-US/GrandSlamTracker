@@ -17,8 +17,17 @@ import {
   Film,
   Lightbulb,
   Target,
+  BookOpen,
+  Receipt,
+  FileText,
+  UserCheck,
+  CreditCard,
+  Wallet,
+  CalendarCheck,
+  Shield,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
+import ThemeToggle from '@/components/ui/ThemeToggle'
 import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 const navigation = [
@@ -34,13 +43,25 @@ const navigation = [
     { name: 'Ideas', href: '/content/ideas', icon: Lightbulb },
   ]},
   { name: 'Grand Slam', href: '/grand-slam', icon: Target },
+  { name: 'Accounting', href: '/accounting', icon: BookOpen, children: [
+    { name: 'Revenue', href: '/accounting/revenue', icon: Receipt },
+    { name: 'Expenses', href: '/accounting/expenses', icon: CreditCard },
+    { name: 'Invoices', href: '/accounting/invoices', icon: FileText },
+    { name: 'Financials', href: '/accounting/financials', icon: DollarSign },
+    { name: 'Tax', href: '/accounting/tax', icon: Shield },
+  ]},
+  { name: 'Payroll', href: '/payroll', icon: Wallet, children: [
+    { name: 'Contractors', href: '/payroll/contractors', icon: UserCheck },
+    { name: 'Payments', href: '/payroll/payments', icon: Banknote },
+    { name: 'Owner Draws', href: '/payroll/owner-draws', icon: CalendarCheck },
+    { name: 'Payout Periods', href: '/payroll/payout-periods', icon: Clock },
+  ]},
   { name: 'Scenarios', href: '/scenarios', icon: Calculator },
   { name: 'Alerts', href: '/alerts', icon: Bell },
 ]
 
 const testClients = [
-  { name: 'Monster Remodeling', href: '/test-clients/monster' },
-  { name: 'MC Racing', href: '/client/mcracing' },
+{ name: 'MC Racing', href: '/client/mcracing' },
   { name: "Bell's Skating Rink", href: '/client/bells' },
   { name: 'Miller Scaping', href: '/test-clients/miller' },
 ]
@@ -129,13 +150,16 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-[var(--border)]">
-        <Link
-          href="/settings"
-          className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] transition-colors"
-        >
-          <Settings className="h-5 w-5" />
-          Settings
-        </Link>
+        <div className="flex items-center justify-between">
+          <Link
+            href="/settings"
+            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium text-[var(--muted)] hover:bg-[var(--surface-hover)] hover:text-[var(--foreground)] transition-colors"
+          >
+            <Settings className="h-5 w-5" />
+            Settings
+          </Link>
+          <ThemeToggle />
+        </div>
 
         {/* User Menu */}
         <div className="mt-4 pt-4 border-t border-[var(--border)]">

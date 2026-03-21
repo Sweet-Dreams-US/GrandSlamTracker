@@ -48,7 +48,7 @@ export default function ClientPasswordGate({ clientName, correctUsername, correc
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
         <div className="animate-pulse text-gray-400">Loading...</div>
       </div>
     )
@@ -56,14 +56,14 @@ export default function ClientPasswordGate({ clientName, correctUsername, correc
 
   if (!authenticated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg)]">
         <div className="w-full max-w-sm">
           <div className="card p-8 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-monster-100 flex items-center justify-center">
-              <Lock className="h-8 w-8 text-monster-600" />
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--surface-hover)] flex items-center justify-center">
+              <Lock className="h-8 w-8 text-[var(--accent)]" />
             </div>
-            <h1 className="text-xl font-bold text-monster-900 mb-1">{clientName}</h1>
-            <p className="text-sm text-gray-500 mb-6">Enter your portal credentials to continue</p>
+            <h1 className="text-xl font-bold text-white mb-1">{clientName}</h1>
+            <p className="text-sm text-[var(--muted)] mb-6">Enter your portal credentials to continue</p>
             <form onSubmit={handleSubmit} className="space-y-4">
               <input
                 type="text"
@@ -71,19 +71,19 @@ export default function ClientPasswordGate({ clientName, correctUsername, correc
                 onChange={(e) => { setUsername(e.target.value); setError('') }}
                 placeholder="Username"
                 autoFocus
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-monster-500 focus:border-monster-500"
+                className="w-full border border-[var(--border)] bg-[var(--bg)] text-white rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] placeholder:text-[var(--muted)]"
               />
               <input
                 type="password"
                 value={password}
                 onChange={(e) => { setPassword(e.target.value); setError('') }}
                 placeholder="Password"
-                className="w-full border border-gray-300 rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-monster-500 focus:border-monster-500"
+                className="w-full border border-[var(--border)] bg-[var(--bg)] text-white rounded-lg px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--accent)] focus:border-[var(--accent)] placeholder:text-[var(--muted)]"
               />
-              {error && <p className="text-sm text-red-600">{error}</p>}
+              {error && <p className="text-sm text-red-400">{error}</p>}
               <button
                 type="submit"
-                className="w-full bg-monster-700 text-white rounded-lg px-4 py-2.5 text-sm font-medium hover:bg-monster-800 transition-colors"
+                className="w-full bg-[var(--accent)] text-black rounded-lg px-4 py-2.5 text-sm font-bold hover:bg-[var(--accent-hover)] transition-colors"
               >
                 Enter Portal
               </button>
@@ -98,7 +98,7 @@ export default function ClientPasswordGate({ clientName, correctUsername, correc
     <div className="relative">
       <button
         onClick={handleLock}
-        className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-monster-100 text-monster-700 hover:bg-monster-200 transition-colors"
+        className="fixed top-4 right-4 z-50 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium bg-[var(--surface)] text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors border border-[var(--border)]"
       >
         <LogOut className="h-3.5 w-3.5" />
         Lock Portal
