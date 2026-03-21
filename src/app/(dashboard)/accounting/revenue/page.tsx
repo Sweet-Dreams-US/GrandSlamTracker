@@ -36,12 +36,18 @@ const fmtDate = (d: string) =>
 
 type Tab = 'media' | 'studio' | 'beats'
 
+interface WorkerEntry { name: string; percent: string }
+interface SalesEntry { name: string; percent: string }
+
 const emptyMedia = {
   date: new Date().toISOString().split('T')[0],
   client: '',
-  type: 'video',
+  deal_type: 'transactional' as string,
   gross_revenue: '',
-  status: 'completed',
+  notes: '',
+  workers: [{ name: '', percent: '100' }] as WorkerEntry[],
+  salesPeople: [] as SalesEntry[],
+  hasSalesPerson: false,
 }
 
 const emptyStudio = {
@@ -128,20 +134,64 @@ export default function RevenuePage() {
     setSubmitting(true)
     const supabase = createSupabaseBrowserClient()
     const gross = Number(mediaForm.gross_revenue)
-    const split = calculateMediaSplit(gross, false)
+    const hasSales = mediaForm.hasSalesPerson && mediaForm.salesPeople.some(s => s.name.trim())
+    const split = calculateMediaSplit(gross, hasSales)
+
+    // Build worker breakdown
+    const validWorkers = mediaForm.workers.filter(w => w.name.trim())
+    const workerBreakdown = validWorkers.map(w => ({
+      name: w.name.trim(),
+      percent: Number(w.percent),
+      amount: Math.round(split.workerAmount * (Number(w.percent) / 100) * 100) / 100,
+    }))
+    const workerPersonStr = validWorkers.map(w => `${w.name.trim()} (${w.percent}%)`).join(', ')
+
+    // Build sales breakdown
+    const validSales = hasSales ? mediaForm.salesPeople.filter(s => s.name.trim()) : []
+    const salesBreakdown = validSales.map(s => ({
+      name: s.name.trim(),
+      percent: Number(s.percent),
+      amount: Math.round(split.salesAmount * (Number(s.percent) / 100) * 100) / 100,
+    }))
+    const salesPersonStr = validSales.length > 0 ? validSales.map(s => `${s.name.trim()} (${s.percent}%)`).join(', ') : null
+
+    const tier = getMediaSplitTier(gross)
     const row = {
       date: mediaForm.date,
-      deal_type: 'transactional',
+      deal_type: mediaForm.deal_type,
       client_name: mediaForm.client,
       total_revenue: gross,
       business_amount: split.businessAmount,
       sales_amount: split.salesAmount,
       worker_amount: split.workerAmount,
+      sales_person: salesPersonStr,
+      worker_person: workerPersonStr || null,
       tier_used: split.tier.label,
+      notes: mediaForm.notes || null,
+      calculation_details: {
+        dealType: mediaForm.deal_type,
+        tierBreakdown: [{
+          tierLabel: tier.label,
+          amountInTier: gross,
+          businessPercent: tier.business,
+          salesPercent: hasSales ? tier.salesReward : 0,
+          workerPercent: tier.worker,
+          businessAmount: split.businessAmount,
+          salesAmount: split.salesAmount,
+          workerAmount: split.workerAmount,
+        }],
+        effectiveRates: {
+          business: hasSales ? tier.business : tier.business + tier.salesReward,
+          sales: hasSales ? tier.salesReward : 0,
+          worker: tier.worker,
+        },
+        workerBreakdown,
+        salesBreakdown,
+      },
     }
     const { data } = await (supabase.from('payout_records') as any).insert(row).select().single()
     if (data) setMediaProjects((prev) => [data, ...prev])
-    setMediaForm({ ...emptyMedia })
+    setMediaForm({ ...emptyMedia, workers: [{ name: '', percent: '100' }], salesPeople: [] })
     setShowForm(false)
     setSubmitting(false)
   }
@@ -268,58 +318,211 @@ export default function RevenuePage() {
           </h3>
 
           {tab === 'media' && (
-            <form onSubmit={handleMediaSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              <div className="form-group">
-                <label className="label">Date</label>
-                <input type="date" className="input" value={mediaForm.date} onChange={(e) => setMediaForm({ ...mediaForm, date: e.target.value })} required />
+            <form onSubmit={handleMediaSubmit} className="space-y-5">
+              {/* Row 1: Core info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="form-group">
+                  <label className="label">Date *</label>
+                  <input type="date" className="input" value={mediaForm.date} onChange={(e) => setMediaForm({ ...mediaForm, date: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Client *</label>
+                  <input type="text" className="input" placeholder="Client or project name" value={mediaForm.client} onChange={(e) => setMediaForm({ ...mediaForm, client: e.target.value })} required />
+                </div>
+                <div className="form-group">
+                  <label className="label">Deal Type</label>
+                  <select className="input" value={mediaForm.deal_type} onChange={(e) => setMediaForm({ ...mediaForm, deal_type: e.target.value })}>
+                    <option value="transactional">Transactional</option>
+                    <option value="grand_slam_monthly">Grand Slam Monthly</option>
+                    <option value="grand_slam_upfront">Grand Slam Upfront</option>
+                    <option value="buyout">Buyout</option>
+                    <option value="retainer">Retainer</option>
+                  </select>
+                </div>
+                <div className="form-group">
+                  <label className="label">Gross Revenue *</label>
+                  <input type="number" step="0.01" className="input" placeholder="0.00" value={mediaForm.gross_revenue} onChange={(e) => setMediaForm({ ...mediaForm, gross_revenue: e.target.value })} required />
+                </div>
               </div>
+
+              {/* Row 2: Notes */}
               <div className="form-group">
-                <label className="label">Client</label>
-                <input type="text" className="input" placeholder="Client name" value={mediaForm.client} onChange={(e) => setMediaForm({ ...mediaForm, client: e.target.value })} required />
+                <label className="label">Notes / Description</label>
+                <input type="text" className="input" placeholder="What's the job? e.g. Music video + 3 reels, Website build, Drone coverage..." value={mediaForm.notes} onChange={(e) => setMediaForm({ ...mediaForm, notes: e.target.value })} />
               </div>
-              <div className="form-group">
-                <label className="label">Type</label>
-                <select className="input" value={mediaForm.type} onChange={(e) => setMediaForm({ ...mediaForm, type: e.target.value })}>
-                  <option value="video">Video</option>
-                  <option value="photo">Photo</option>
-                  <option value="social">Social Media</option>
-                  <option value="branding">Branding</option>
-                  <option value="web">Web</option>
-                  <option value="other">Other</option>
-                </select>
+
+              {/* Row 3: Workers */}
+              <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                    <Users className="h-3.5 w-3.5 inline mr-1.5" style={{ color: 'var(--warning)' }} />
+                    Workers
+                  </p>
+                  <button
+                    type="button"
+                    className="text-xs px-2 py-1 rounded"
+                    style={{ backgroundColor: 'var(--border)', color: 'var(--foreground)' }}
+                    onClick={() => setMediaForm({ ...mediaForm, workers: [...mediaForm.workers, { name: '', percent: '0' }] })}
+                  >
+                    <Plus className="h-3 w-3 inline mr-1" />Add Worker
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {mediaForm.workers.map((w, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        className="input flex-1"
+                        placeholder="Name (e.g. Cole, Jay)"
+                        value={w.name}
+                        onChange={(e) => {
+                          const updated = [...mediaForm.workers]
+                          updated[i] = { ...updated[i], name: e.target.value }
+                          setMediaForm({ ...mediaForm, workers: updated })
+                        }}
+                      />
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="number"
+                          className="input w-20 text-center"
+                          placeholder="%"
+                          value={w.percent}
+                          onChange={(e) => {
+                            const updated = [...mediaForm.workers]
+                            updated[i] = { ...updated[i], percent: e.target.value }
+                            setMediaForm({ ...mediaForm, workers: updated })
+                          }}
+                        />
+                        <span className="text-xs" style={{ color: 'var(--muted)' }}>%</span>
+                      </div>
+                      {mediaForm.workers.length > 1 && (
+                        <button
+                          type="button"
+                          className="p-1 rounded"
+                          style={{ color: 'var(--danger)' }}
+                          onClick={() => setMediaForm({ ...mediaForm, workers: mediaForm.workers.filter((_, j) => j !== i) })}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {(() => {
+                  const totalPct = mediaForm.workers.reduce((s, w) => s + (Number(w.percent) || 0), 0)
+                  const isOff = totalPct !== 100 && mediaForm.workers.some(w => w.name.trim())
+                  return isOff ? (
+                    <p className="text-xs mt-2" style={{ color: totalPct > 100 ? 'var(--danger)' : 'var(--warning)' }}>
+                      Worker split totals {totalPct}% — should be 100%
+                    </p>
+                  ) : null
+                })()}
               </div>
-              <div className="form-group">
-                <label className="label">Gross Revenue</label>
-                <input type="number" step="0.01" className="input" placeholder="0.00" value={mediaForm.gross_revenue} onChange={(e) => setMediaForm({ ...mediaForm, gross_revenue: e.target.value })} required />
+
+              {/* Row 4: Sales */}
+              <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--surface)', border: '1px solid var(--border)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={mediaForm.hasSalesPerson}
+                      onChange={(e) => {
+                        const checked = e.target.checked
+                        setMediaForm({
+                          ...mediaForm,
+                          hasSalesPerson: checked,
+                          salesPeople: checked && mediaForm.salesPeople.length === 0
+                            ? [{ name: '', percent: '100' }]
+                            : mediaForm.salesPeople,
+                        })
+                      }}
+                      className="w-4 h-4 rounded"
+                      style={{ accentColor: 'var(--accent)' }}
+                    />
+                    <span className="text-sm font-medium" style={{ color: 'var(--foreground)' }}>
+                      <DollarSign className="h-3.5 w-3.5 inline mr-1" style={{ color: 'var(--accent)' }} />
+                      Salesperson on this deal
+                    </span>
+                  </label>
+                  {mediaForm.hasSalesPerson && (
+                    <button
+                      type="button"
+                      className="text-xs px-2 py-1 rounded"
+                      style={{ backgroundColor: 'var(--border)', color: 'var(--foreground)' }}
+                      onClick={() => setMediaForm({ ...mediaForm, salesPeople: [...mediaForm.salesPeople, { name: '', percent: '0' }] })}
+                    >
+                      <Plus className="h-3 w-3 inline mr-1" />Add
+                    </button>
+                  )}
+                </div>
+                {mediaForm.hasSalesPerson && (
+                  <div className="space-y-2">
+                    {mediaForm.salesPeople.map((s, i) => (
+                      <div key={i} className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          className="input flex-1"
+                          placeholder="Salesperson name"
+                          value={s.name}
+                          onChange={(e) => {
+                            const updated = [...mediaForm.salesPeople]
+                            updated[i] = { ...updated[i], name: e.target.value }
+                            setMediaForm({ ...mediaForm, salesPeople: updated })
+                          }}
+                        />
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            className="input w-20 text-center"
+                            placeholder="%"
+                            value={s.percent}
+                            onChange={(e) => {
+                              const updated = [...mediaForm.salesPeople]
+                              updated[i] = { ...updated[i], percent: e.target.value }
+                              setMediaForm({ ...mediaForm, salesPeople: updated })
+                            }}
+                          />
+                          <span className="text-xs" style={{ color: 'var(--muted)' }}>%</span>
+                        </div>
+                        {mediaForm.salesPeople.length > 1 && (
+                          <button
+                            type="button"
+                            className="p-1 rounded"
+                            style={{ color: 'var(--danger)' }}
+                            onClick={() => setMediaForm({ ...mediaForm, salesPeople: mediaForm.salesPeople.filter((_, j) => j !== i) })}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="form-group">
-                <label className="label">Status</label>
-                <select className="input" value={mediaForm.status} onChange={(e) => setMediaForm({ ...mediaForm, status: e.target.value })}>
-                  <option value="completed">Completed</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="pending">Pending</option>
-                </select>
-              </div>
-              <div className="form-group sm:col-span-2 lg:col-span-3 flex items-end">
+
+              {/* Split Preview + Submit */}
+              <div className="flex items-center justify-between pt-2" style={{ borderTop: '1px solid var(--border)' }}>
                 {(() => {
                   const gross = Number(mediaForm.gross_revenue || 0)
+                  const hasSales = mediaForm.hasSalesPerson && mediaForm.salesPeople.some(s => s.name.trim())
                   const tier = getMediaSplitTier(gross)
-                  const split = calculateMediaSplit(gross, false)
+                  const split = calculateMediaSplit(gross, hasSales)
                   return (
                     <div className="space-y-1 text-sm" style={{ color: 'var(--muted)' }}>
-                      <span className="badge-info text-xs">{tier.label} tier</span>
-                      <div className="flex items-center gap-3 mt-1">
-                        <span>Business ({pct(tier.business + tier.salesReward)}): <strong style={{ color: 'var(--foreground)' }}>{fmt(split.businessAmount)}</strong></span>
-                        <span>Worker ({pct(tier.worker)}): <strong style={{ color: 'var(--foreground)' }}>{fmt(split.workerAmount)}</strong></span>
-                        <span className="text-xs" style={{ color: 'var(--muted)' }}>(Sales reward {pct(tier.salesReward)} held — no salesperson)</span>
+                      {gross > 0 && <span className="badge-info text-xs mr-2">{tier.label} tier</span>}
+                      <div className="flex flex-wrap items-center gap-3 mt-1">
+                        <span>Business: <strong style={{ color: 'var(--success)' }}>{fmt(split.businessAmount)}</strong></span>
+                        {hasSales && <span>Sales: <strong style={{ color: 'var(--accent)' }}>{fmt(split.salesAmount)}</strong></span>}
+                        <span>Workers: <strong style={{ color: 'var(--warning)' }}>{fmt(split.workerAmount)}</strong></span>
+                        {!hasSales && gross > 0 && (
+                          <span className="text-xs">(Sales {pct(tier.salesReward)} absorbed by business)</span>
+                        )}
                       </div>
                     </div>
                   )
                 })()}
-              </div>
-              <div className="form-group flex items-end">
-                <button type="submit" className="btn-primary w-full" disabled={submitting}>
-                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Project'}
+                <button type="submit" className="btn-primary" disabled={submitting}>
+                  {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save Job'}
                 </button>
               </div>
             </form>
