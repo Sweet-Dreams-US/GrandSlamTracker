@@ -25,6 +25,8 @@ import {
   Wallet,
   CalendarCheck,
   Shield,
+  BarChart3,
+  Landmark,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -33,12 +35,14 @@ import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Clients', href: '/clients', icon: Users },
+  { name: 'Revenue Hub', href: '/revenue', icon: Landmark },
   { name: 'Financials', href: '/financials', icon: DollarSign, children: [
     { name: 'Payouts', href: '/financials/payouts', icon: Banknote },
   ]},
   { name: 'Studio', href: '/studio', icon: Music, children: [
     { name: 'Sessions', href: '/studio/sessions', icon: Clock },
   ]},
+  { name: 'Analytics', href: '/analytics', icon: BarChart3 },
   { name: 'Content', href: '/content', icon: Film, children: [
     { name: 'Ideas', href: '/content/ideas', icon: Lightbulb },
   ]},

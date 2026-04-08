@@ -16,7 +16,7 @@ import {
   DealPayoutResult,
 } from '@/lib/calculations/dealPayoutCalculator'
 import type { PayoutRecord, PayoutTransaction, InsertTables } from '@/lib/supabase/types'
-import { ArrowLeft, Save, Filter, CheckCircle2, AlertTriangle, Plus, X, ChevronDown, ChevronRight, Trash2 } from 'lucide-react'
+import { ArrowLeft, Save, Filter, CheckCircle2, AlertTriangle, Plus, X, ChevronDown, ChevronRight, Trash2, Upload, FileText, Download, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 
 // --- Person entry type ---
@@ -254,6 +254,10 @@ export default function PayoutsPage() {
   const [savingTxn, setSavingTxn] = useState(false)
   const [confirmDeleteRecord, setConfirmDeleteRecord] = useState<string | null>(null)
   const [deletingRecord, setDeletingRecord] = useState<string | null>(null)
+  // Contract files
+  const [contractFiles, setContractFiles] = useState<{ id: string; file_name: string; file_path: string; file_size: number | null; file_type: string | null; uploaded_at: string; notes: string | null }[]>([])
+  const [uploadingContract, setUploadingContract] = useState(false)
+  const [loadingContracts, setLoadingContracts] = useState(false)
 
   async function handleDeleteRecord(id: string) {
     setDeletingRecord(id)
@@ -308,9 +312,10 @@ export default function PayoutsPage() {
     if (expandedRecordId === recordId) {
       setExpandedRecordId(null)
       setTransactions([])
+      setContractFiles([])
     } else {
       setExpandedRecordId(recordId)
-      await loadTransactions(recordId)
+      await Promise.all([loadTransactions(recordId), loadContractFiles(recordId)])
     }
   }
 
@@ -347,6 +352,66 @@ export default function PayoutsPage() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase.from('payout_transactions') as any).delete().eq('id', txnId)
     await loadTransactions(expandedRecordId)
+  }
+
+  async function loadContractFiles(recordId: string) {
+    setLoadingContracts(true)
+    try {
+      const res = await fetch(`/api/contracts?payout_record_id=${recordId}`)
+      const data = await res.json()
+      if (data.success) setContractFiles(data.files || [])
+    } catch { /* ignore */ }
+    setLoadingContracts(false)
+  }
+
+  async function handleUploadContract(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!expandedRecordId || !e.target.files?.length) return
+    setUploadingContract(true)
+    const file = e.target.files[0]
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('payout_record_id', expandedRecordId)
+    try {
+      const res = await fetch('/api/contracts', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (data.success) {
+        await loadContractFiles(expandedRecordId)
+      }
+    } catch (err) {
+      console.error('Upload error:', err)
+    }
+    setUploadingContract(false)
+    // Reset input
+    e.target.value = ''
+  }
+
+  async function handleDownloadContract(filePath: string, fileName: string) {
+    try {
+      const res = await fetch(`/api/contracts/download?path=${encodeURIComponent(filePath)}`)
+      const data = await res.json()
+      if (data.success && data.url) {
+        const a = document.createElement('a')
+        a.href = data.url
+        a.download = fileName
+        a.target = '_blank'
+        a.click()
+      }
+    } catch (err) {
+      console.error('Download error:', err)
+    }
+  }
+
+  async function handleDeleteContract(fileId: string) {
+    if (!expandedRecordId) return
+    try {
+      const res = await fetch(`/api/contracts?id=${fileId}`, { method: 'DELETE' })
+      const data = await res.json()
+      if (data.success) {
+        await loadContractFiles(expandedRecordId)
+      }
+    } catch (err) {
+      console.error('Delete contract error:', err)
+    }
   }
 
   function updateForm(updates: Partial<FormState>) {
@@ -1195,6 +1260,89 @@ export default function PayoutsPage() {
                             <Plus className="h-3 w-3" />{savingTxn ? '...' : 'Add'}
                           </button>
                         </div>
+                      </div>
+
+                      {/* Contract Files */}
+                      <div className="rounded-lg p-4" style={{ backgroundColor: 'var(--background)' }}>
+                        <div className="flex items-center justify-between mb-3">
+                          <h4 className="text-xs font-semibold uppercase flex items-center gap-2" style={{ color: 'var(--muted)' }}>
+                            <FileText className="h-3.5 w-3.5" /> Contract Files
+                            {contractFiles.length > 0 && (
+                              <span className="badge-info text-[10px]">{contractFiles.length}</span>
+                            )}
+                          </h4>
+                          <label className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium cursor-pointer transition-colors ${
+                            uploadingContract ? 'opacity-50 pointer-events-none' : ''
+                          }`} style={{ backgroundColor: 'var(--accent)', color: 'white' }}>
+                            {uploadingContract ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <Upload className="h-3 w-3" />
+                            )}
+                            {uploadingContract ? 'Uploading...' : 'Upload'}
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.doc,.docx,.txt,.png,.jpg,.jpeg,.xls,.xlsx"
+                              onChange={handleUploadContract}
+                              disabled={uploadingContract}
+                            />
+                          </label>
+                        </div>
+
+                        {loadingContracts ? (
+                          <div className="flex items-center gap-2 py-3 text-xs" style={{ color: 'var(--muted)' }}>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading files...
+                          </div>
+                        ) : contractFiles.length === 0 ? (
+                          <p className="text-xs py-2" style={{ color: 'var(--muted)' }}>
+                            No contract files uploaded yet. Upload PDFs, documents, or images.
+                          </p>
+                        ) : (
+                          <div className="space-y-1">
+                            {contractFiles.map((cf) => {
+                              const sizeStr = cf.file_size
+                                ? cf.file_size > 1024 * 1024
+                                  ? `${(cf.file_size / (1024 * 1024)).toFixed(1)} MB`
+                                  : `${(cf.file_size / 1024).toFixed(0)} KB`
+                                : ''
+                              return (
+                                <div key={cf.id} className="flex items-center justify-between py-2" style={{ borderBottom: '1px solid var(--border)' }}>
+                                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <FileText className="h-4 w-4 flex-shrink-0" style={{ color: 'var(--accent)' }} />
+                                    <div className="min-w-0">
+                                      <p className="text-sm font-medium truncate" style={{ color: 'var(--foreground)' }}>{cf.file_name}</p>
+                                      <p className="text-[10px]" style={{ color: 'var(--muted)' }}>
+                                        {sizeStr}{sizeStr && ' · '}{new Date(cf.uploaded_at).toLocaleDateString()}
+                                        {cf.notes && ` · ${cf.notes}`}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDownloadContract(cf.file_path, cf.file_name) }}
+                                      className="p-1.5 rounded-lg transition-colors hover:opacity-80"
+                                      style={{ color: 'var(--accent)' }}
+                                      title="Download"
+                                    >
+                                      <Download className="h-3.5 w-3.5" />
+                                    </button>
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); handleDeleteContract(cf.id) }}
+                                      className="p-1.5 rounded-lg transition-colors"
+                                      style={{ color: 'var(--danger)', opacity: 0.4 }}
+                                      onMouseEnter={(e) => (e.currentTarget.style.opacity = '1')}
+                                      onMouseLeave={(e) => (e.currentTarget.style.opacity = '0.4')}
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                    </button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
                       </div>
 
                       {/* Transaction History */}

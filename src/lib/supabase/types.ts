@@ -792,6 +792,38 @@ export interface Database {
           date?: string
         }
       }
+      contract_files: {
+        Row: {
+          id: string
+          payout_record_id: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          uploaded_at: string
+          notes: string | null
+        }
+        Insert: {
+          id?: string
+          payout_record_id: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          uploaded_at?: string
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          payout_record_id?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          uploaded_at?: string
+          notes?: string | null
+        }
+      }
       admins: {
         Row: {
           id: string
@@ -1216,6 +1248,7 @@ export type DriveLink = Tables<'drive_links'>
 export type SavedScenario = Tables<'saved_scenarios'>
 export type PayoutRecord = Tables<'payout_records'>
 export type PayoutTransaction = Tables<'payout_transactions'>
+export type ContractFile = Tables<'contract_files'>
 export type Admin = Tables<'admins'>
 export type StudioSession = Tables<'studio_sessions'>
 export type StudioSessionInsert = InsertTables<'studio_sessions'>
