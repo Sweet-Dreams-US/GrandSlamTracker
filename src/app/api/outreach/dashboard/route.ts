@@ -22,11 +22,15 @@ export async function GET(req: NextRequest) {
   if (unauthorized) return unauthorized
 
   const supabase = createServerClient() as any
+  // Use `*` to match the /clients list endpoint exactly. Narrowing the
+  // column list via comma-separated shorthand has surfaced inconsistent
+  // results against this project's schema/policies; `*` is reliable.
   const { data, error } = await supabase
     .from('clients')
-    .select('id, business_name, status, notes, created_at, updated_at')
+    .select('*')
     .limit(2000)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  const rawCount = Array.isArray(data) ? data.length : 0
 
   const now = Date.now()
   const DAY = 24 * 60 * 60 * 1000
@@ -77,6 +81,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     totals: {
+      total_clients: rawCount,
       total_outreach: totalOutreach,
       new_prospects_this_week: newProspectsThisWeek,
       drafts_pending_over_48h: draftsPendingOver48h.length,
