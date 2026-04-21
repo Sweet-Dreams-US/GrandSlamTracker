@@ -27,6 +27,7 @@ import {
   Shield,
   BarChart3,
   Landmark,
+  Send,
 } from 'lucide-react'
 import UserMenu from '@/components/auth/UserMenu'
 import ThemeToggle from '@/components/ui/ThemeToggle'
@@ -34,6 +35,10 @@ import sweetDreamsLogo from '@/assets/SweetDreamsUSlogowide.png'
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Outreach', href: '/outreach', icon: Send, children: [
+    { name: 'Import', href: '/outreach/import', icon: Banknote },
+    { name: 'Settings', href: '/outreach/settings', icon: Settings },
+  ]},
   { name: 'Clients', href: '/clients', icon: Users },
   { name: 'Revenue Hub', href: '/revenue', icon: Landmark },
   { name: 'Financials', href: '/financials', icon: DollarSign, children: [
