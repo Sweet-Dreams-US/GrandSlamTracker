@@ -9,7 +9,7 @@
 // DELETE /api/outreach/clients/:id
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import {
   parseNotesBlock,
@@ -29,7 +29,7 @@ export async function GET(
   const unauthorized = requireCoworkAuth(req)
   if (unauthorized) return unauthorized
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data, error } = await supabase
     .from('clients')
     .select('*')
@@ -58,7 +58,7 @@ export async function PATCH(
 
   const { outreach_block, replace_block, ...updates } = body
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   // Read current notes + block
   const { data: current, error: readError } = await supabase
     .from('clients')
@@ -137,7 +137,7 @@ export async function DELETE(
 
   // Soft delete: just strip the outreach block. Client record stays intact.
   // Destructive client deletion still uses the existing /clients UI path.
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data: current, error: readError } = await supabase
     .from('clients')
     .select('notes')

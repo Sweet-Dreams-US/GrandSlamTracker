@@ -10,7 +10,7 @@
 //   Body is a ClientInsert + `outreach_block: Partial<OutreachBlock>`.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import {
   parseNotesBlock,
@@ -57,7 +57,7 @@ export async function GET(req: NextRequest) {
   const hasBlockParam = searchParams.get('has_block')
   const limit = Math.min(parseInt(searchParams.get('limit') || '100', 10), 500)
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   let query = supabase.from('clients').select('*').order('updated_at', { ascending: false })
 
   if (status) {
@@ -127,7 +127,7 @@ export async function POST(req: NextRequest) {
 
   const insertPayload = { ...clientPayload, notes: notesContent }
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data, error } = await supabase.from('clients').insert(insertPayload).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 

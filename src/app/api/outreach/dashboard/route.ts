@@ -9,7 +9,7 @@
 //   - Per-service breakdown
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import { parseNotesBlock, type OutreachBlock } from '@/lib/outreach/notesBlock'
 
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const unauthorized = requireCoworkAuth(req)
   if (unauthorized) return unauthorized
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   // Use `*` to match the /clients list endpoint exactly. Narrowing the
   // column list via comma-separated shorthand has surfaced inconsistent
   // results against this project's schema/policies; `*` is reliable.

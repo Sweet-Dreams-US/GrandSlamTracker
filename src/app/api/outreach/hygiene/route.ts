@@ -9,7 +9,7 @@
 // with their parsed outreach block so Cowork can decide what to do.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import { parseNotesBlock } from '@/lib/outreach/notesBlock'
 
@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
 
   const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString()
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data, error } = await supabase
     .from('clients')
     .select('*')

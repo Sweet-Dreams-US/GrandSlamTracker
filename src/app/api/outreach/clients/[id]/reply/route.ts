@@ -10,7 +10,7 @@
 //   }
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import {
   parseNotesBlock,
@@ -46,7 +46,7 @@ export async function POST(
     return NextResponse.json({ error: 'thread_id is required' }, { status: 400 })
   }
 
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data: current, error: readError } = await supabase
     .from('clients')
     .select('notes, status')

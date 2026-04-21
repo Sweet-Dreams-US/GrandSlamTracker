@@ -6,7 +6,7 @@
 // by email (case insensitive).
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient } from '@/lib/supabase/client'
+import { createOutreachSupabase } from '@/lib/outreach/supabase'
 import { requireCoworkAuth } from '@/lib/outreach/auth'
 import {
   parseNotesBlock,
@@ -22,7 +22,7 @@ export const dynamic = 'force-dynamic'
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 async function loadBlock(id: string) {
-  const supabase = createServerClient() as any
+  const supabase = createOutreachSupabase() as any
   const { data, error } = await supabase
     .from('clients')
     .select('notes')
