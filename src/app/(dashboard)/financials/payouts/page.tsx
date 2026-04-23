@@ -800,7 +800,40 @@ export default function PayoutsPage() {
             <h2 className="section-title">Calculated Results</h2>
 
             {!result ? (
-              <p className="text-sm text-gray-400 mt-4">Fill in the form to see calculations.</p>
+              <div className="mt-4 space-y-2">
+                <p className="text-sm text-gray-400">Fill in the form to see calculations.</p>
+                {(() => {
+                  const missing: string[] = []
+                  if (!form.clientName.trim()) missing.push('Client Name')
+                  switch (form.dealType) {
+                    case 'grand_slam_monthly':
+                      if (!form.baselineRevenue || isNaN(parseFloat(form.baselineRevenue))) missing.push('Baseline Revenue')
+                      if (!form.currentRevenue || isNaN(parseFloat(form.currentRevenue))) missing.push('Current Revenue')
+                      break
+                    case 'grand_slam_upfront':
+                      if (!form.contractAmount || parseFloat(form.contractAmount) <= 0) missing.push('Contract Amount (must be > 0)')
+                      break
+                    case 'transactional':
+                      if (!form.projectFee || parseFloat(form.projectFee) <= 0) missing.push('Project Fee (must be > 0)')
+                      break
+                    case 'buyout':
+                      if (!form.month1Revenue || isNaN(parseFloat(form.month1Revenue))) missing.push('Month 1 Revenue')
+                      if (!form.month2Revenue || isNaN(parseFloat(form.month2Revenue))) missing.push('Month 2 Revenue')
+                      if (!form.month3Revenue || isNaN(parseFloat(form.month3Revenue))) missing.push('Month 3 Revenue')
+                      if (!form.partnershipMonths || parseInt(form.partnershipMonths) < 3) missing.push('Partnership Months (min 3)')
+                      break
+                  }
+                  if (missing.length === 0) return null
+                  return (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded p-2">
+                      <span className="font-medium">Still needed:</span>{' '}
+                      {missing.map((m, i) => (
+                        <span key={m}>{i > 0 && ', '}<span className="font-mono">{m}</span></span>
+                      ))}
+                    </div>
+                  )
+                })()}
+              </div>
             ) : (
               <div className="mt-4 space-y-5">
                 {/* Client Fee Breakdown */}

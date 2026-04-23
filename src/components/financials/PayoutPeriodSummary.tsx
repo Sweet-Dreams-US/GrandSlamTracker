@@ -178,6 +178,9 @@ export default function PayoutPeriodSummary() {
   const [payeeName, setPayeeName] = useState<string>('')
   const [paymentDate, setPaymentDate] = useState<string>(toISO(new Date()))
   const [submitting, setSubmitting] = useState(false)
+  // Per-line amount overrides for partial payments.
+  // Key = `${payout_record_id}::${recipient_type}`; value = string input (blank means "use outstanding").
+  const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
 
   // Person-view expand state
   const [personExpanded, setPersonExpanded] = useState<Record<string, boolean>>({})
@@ -328,9 +331,20 @@ export default function PayoutPeriodSummary() {
     [jobRows, selected]
   )
 
-  const paymentPreview: PaymentPreviewRow[] = useMemo(() => {
+  /** Compute the actual amount to pay for a line, applying any override from customAmounts. */
+  function resolveAmount(jobId: string, type: RecipientType, outstanding: number): number {
+    const key = `${jobId}::${type}`
+    const raw = customAmounts[key]
+    if (raw === undefined || raw === '') return Math.round(outstanding * 100) / 100
+    const n = parseFloat(raw)
+    if (isNaN(n) || n < 0) return 0
+    // Cap at outstanding so a typo can't overpay
+    return Math.min(Math.round(n * 100) / 100, Math.round(outstanding * 100) / 100)
+  }
+
+  const paymentPreview: (PaymentPreviewRow & { outstanding: number })[] = useMemo(() => {
     if (!payeeName || selectedJobs.length === 0) return []
-    const out: PaymentPreviewRow[] = []
+    const out: (PaymentPreviewRow & { outstanding: number })[] = []
     for (const j of selectedJobs) {
       const w = j.workers.find((l) => l.canonical_name === payeeName)
       if (w && w.outstanding > 0) {
@@ -338,7 +352,8 @@ export default function PayoutPeriodSummary() {
           payout_record_id: j.id,
           client_name: j.client_name,
           recipient_type: 'worker',
-          amount: w.outstanding,
+          amount: resolveAmount(j.id, 'worker', w.outstanding),
+          outstanding: w.outstanding,
         })
       }
       const s = j.sales.find((l) => l.canonical_name === payeeName)
@@ -347,15 +362,21 @@ export default function PayoutPeriodSummary() {
           payout_record_id: j.id,
           client_name: j.client_name,
           recipient_type: 'sales',
-          amount: s.outstanding,
+          amount: resolveAmount(j.id, 'sales', s.outstanding),
+          outstanding: s.outstanding,
         })
       }
     }
     return out
-  }, [selectedJobs, payeeName])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedJobs, payeeName, customAmounts])
 
   const previewTotal = useMemo(
     () => paymentPreview.reduce((s, l) => s + l.amount, 0),
+    [paymentPreview]
+  )
+  const previewOutstandingTotal = useMemo(
+    () => paymentPreview.reduce((s, l) => s + l.outstanding, 0),
     [paymentPreview]
   )
 
@@ -386,26 +407,34 @@ export default function PayoutPeriodSummary() {
 
   async function confirmPayment() {
     if (!payeeName) { alert('Pick a recipient first.'); return }
-    if (paymentPreview.length === 0) {
-      alert(`${payeeName} has no outstanding amount on any of the selected jobs.`)
+    const payable = paymentPreview.filter((p) => p.amount > 0)
+    if (payable.length === 0) {
+      alert(`Nothing to pay — every line is set to $0 or ${payeeName} has no outstanding on the selected jobs.`)
       return
     }
     const skipped = selectedJobs.length - new Set(paymentPreview.map((p) => p.payout_record_id)).size
+    const zeroLines = paymentPreview.length - payable.length
+    const partialCount = payable.filter((p) => p.amount < p.outstanding).length
     const msg =
-      `Record payment of ${fmt(previewTotal)} to ${payeeName}?\n\n` +
-      `This inserts ${paymentPreview.length} transaction${paymentPreview.length === 1 ? '' : 's'} dated ${paymentDate}.` +
-      (skipped > 0 ? `\n\n(${skipped} selected job${skipped === 1 ? '' : 's'} will be skipped — ${payeeName} has nothing outstanding on ${skipped === 1 ? 'it' : 'them'}.)` : '')
+      `Record payment of ${fmt(payable.reduce((s, p) => s + p.amount, 0))} to ${payeeName}?\n\n` +
+      `Inserts ${payable.length} transaction${payable.length === 1 ? '' : 's'} dated ${paymentDate}.` +
+      (partialCount > 0 ? `\n(${partialCount} partial payment${partialCount === 1 ? '' : 's'} — remaining balance will stay outstanding.)` : '') +
+      (zeroLines > 0 ? `\n${zeroLines} line${zeroLines === 1 ? '' : 's'} set to $0 will be skipped.` : '') +
+      (skipped > 0 ? `\n${skipped} selected job${skipped === 1 ? '' : 's'} had no outstanding for ${payeeName}.` : '')
     if (!window.confirm(msg)) return
 
     setSubmitting(true)
     const supabase = createSupabaseBrowserClient() as any
-    const rows = paymentPreview.map((p) => ({
+    const rows = payable.map((p) => ({
       payout_record_id: p.payout_record_id,
       transaction_type: p.recipient_type === 'worker' ? 'payment_to_worker' : 'payment_to_sales',
       recipient: payeeName,
       amount: p.amount,
       date: paymentDate,
-      description: `Bulk payout from period view ${period.label}`,
+      description:
+        p.amount < p.outstanding
+          ? `Partial payout (${fmt(p.amount)} of ${fmt(p.outstanding)}) from period view ${period.label}`
+          : `Bulk payout from period view ${period.label}`,
     }))
     const { error } = await supabase.from('payout_transactions').insert(rows)
     setSubmitting(false)
@@ -414,6 +443,7 @@ export default function PayoutPeriodSummary() {
       return
     }
     setSelected(new Set())
+    setCustomAmounts({})
     await load()
   }
 
@@ -717,30 +747,68 @@ export default function PayoutPeriodSummary() {
                   <label className="label text-xs">Total to pay</label>
                   <div className="input text-sm font-bold text-emerald-400 inline-flex items-center h-10">
                     {fmt(previewTotal)}
+                    {previewTotal < previewOutstandingTotal && (
+                      <span className="ml-2 text-[10px] text-amber-400 font-normal">
+                        (partial — {fmt(previewOutstandingTotal - previewTotal)} still outstanding after)
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>
 
               {payeeName && (
-                <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 max-h-48 overflow-y-auto">
-                  <p className="text-[10px] uppercase tracking-wide text-[var(--muted)] mb-2">Preview — what will be inserted</p>
+                <div className="rounded-md border border-[var(--border)] bg-[var(--bg)] p-3 max-h-72 overflow-y-auto">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] uppercase tracking-wide text-[var(--muted)]">Preview — edit amounts for partial payments</p>
+                    {Object.keys(customAmounts).length > 0 && (
+                      <button onClick={() => setCustomAmounts({})} className="text-[10px] text-[var(--accent)] hover:underline">
+                        Reset all to full
+                      </button>
+                    )}
+                  </div>
                   {paymentPreview.length === 0 ? (
                     <p className="text-xs text-amber-400">
                       {payeeName} has nothing outstanding on the selected jobs. Pick different jobs or a different recipient.
                     </p>
                   ) : (
-                    <ul className="text-xs space-y-1">
-                      {paymentPreview.map((p, i) => (
-                        <li key={i} className="flex items-center justify-between">
-                          <span className="text-[var(--foreground)]">
-                            {p.client_name} <span className="text-[var(--muted)]">({p.recipient_type})</span>
-                          </span>
-                          <span className="font-mono text-emerald-400">{fmt(p.amount)}</span>
-                        </li>
-                      ))}
+                    <ul className="text-xs space-y-1.5">
+                      {paymentPreview.map((p) => {
+                        const key = `${p.payout_record_id}::${p.recipient_type}`
+                        const rawInput = customAmounts[key] ?? ''
+                        const displayValue = rawInput === '' ? p.outstanding.toFixed(2) : rawInput
+                        const isPartial = p.amount > 0 && p.amount < p.outstanding
+                        const isZero = p.amount === 0
+                        return (
+                          <li key={key} className="flex items-center gap-2">
+                            <span className="flex-1 min-w-0 truncate text-[var(--foreground)]">
+                              {p.client_name} <span className="text-[var(--muted)]">({p.recipient_type})</span>
+                            </span>
+                            <span className="text-[10px] text-[var(--muted)]">$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              max={p.outstanding}
+                              step="0.01"
+                              value={displayValue}
+                              onChange={(e) => setCustomAmounts((prev) => ({ ...prev, [key]: e.target.value }))}
+                              onFocus={(e) => e.target.select()}
+                              className="input text-xs py-0.5 px-1.5 w-24 text-right font-mono"
+                            />
+                            <span className="text-[10px] text-[var(--muted)] whitespace-nowrap">
+                              of {fmt(p.outstanding)}
+                            </span>
+                            {isPartial && (
+                              <span className="text-[10px] px-1 rounded bg-amber-500/10 text-amber-400">partial</span>
+                            )}
+                            {isZero && (
+                              <span className="text-[10px] px-1 rounded bg-rose-500/10 text-rose-400">skip</span>
+                            )}
+                          </li>
+                        )
+                      })}
                       {selectedJobs.length - new Set(paymentPreview.map((p) => p.payout_record_id)).size > 0 && (
                         <li className="text-amber-400 pt-1 border-t border-[var(--border)]">
-                          {selectedJobs.length - new Set(paymentPreview.map((p) => p.payout_record_id)).size} selected job(s) will be skipped — {payeeName} has no outstanding on them.
+                          {selectedJobs.length - new Set(paymentPreview.map((p) => p.payout_record_id)).size} selected job(s) hidden — {payeeName} has nothing outstanding on them.
                         </li>
                       )}
                     </ul>
