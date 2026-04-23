@@ -716,6 +716,7 @@ export interface Database {
           created_at: string
           deal_type: string
           client_name: string
+          client_id: string | null
           date: string
           total_revenue: number
           business_amount: number
@@ -732,6 +733,7 @@ export interface Database {
           created_at?: string
           deal_type: string
           client_name: string
+          client_id?: string | null
           date: string
           total_revenue: number
           business_amount: number
@@ -748,6 +750,7 @@ export interface Database {
           created_at?: string
           deal_type?: string
           client_name?: string
+          client_id?: string | null
           date?: string
           total_revenue?: number
           business_amount?: number

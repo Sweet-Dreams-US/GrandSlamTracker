@@ -19,6 +19,8 @@ import type { PayoutRecord, PayoutTransaction, InsertTables } from '@/lib/supaba
 import { ArrowLeft, Save, Filter, CheckCircle2, AlertTriangle, Plus, X, ChevronDown, ChevronRight, Trash2, Upload, FileText, Download, Loader2 } from 'lucide-react'
 import Link from 'next/link'
 import PayoutPeriodSummary from '@/components/financials/PayoutPeriodSummary'
+import ClientPicker from '@/components/financials/ClientPicker'
+import PayoutRecordStatusBadges, { type RecordReconciliation } from '@/components/financials/PayoutRecordStatusBadges'
 
 // --- Person entry type ---
 
@@ -233,10 +235,13 @@ function PersonListEditor({ label, people, onChange, poolTotal, color, teamMembe
 
 export default function PayoutsPage() {
   const [form, setForm] = useState<FormState>(initialForm)
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null)
   const [excludeSales, setExcludeSales] = useState(false)
   const [salesPeople, setSalesPeople] = useState<PersonEntry[]>([newPerson()])
   const [workers, setWorkers] = useState<PersonEntry[]>([newPerson()])
   const [records, setRecords] = useState<PayoutRecord[]>([])
+  // All transactions for the visible records — used to compute status indicators on every card
+  const [allTransactions, setAllTransactions] = useState<PayoutTransaction[]>([])
   const [saving, setSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
   const [filterDealType, setFilterDealType] = useState<string>('all')
@@ -290,10 +295,44 @@ export default function PayoutsPage() {
       .limit(100)
 
     if (!error && data) {
-      setRecords(data as PayoutRecord[])
+      const recs = data as PayoutRecord[]
+      setRecords(recs)
+      // Also load every transaction for those records in one shot, so each card
+      // can render its reconciliation status without expanding.
+      const ids = recs.map((r) => r.id)
+      if (ids.length > 0) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data: txns } = await (supabase.from('payout_transactions') as any)
+          .select('*')
+          .in('payout_record_id', ids)
+        if (txns) setAllTransactions(txns as PayoutTransaction[])
+      } else {
+        setAllTransactions([])
+      }
     }
     setLoading(false)
   }
+
+  // Build a Map<payout_record_id, RecordReconciliation> from allTransactions so
+  // every visible card can render its status at a glance without extra queries.
+  const reconciliationByRecord = useMemo(() => {
+    const map = new Map<string, RecordReconciliation>()
+    for (const r of records) {
+      map.set(r.id, { deposits_received: 0, business_paid: 0, workers_paid: 0, sales_paid: 0 })
+    }
+    for (const t of allTransactions) {
+      const entry = map.get(t.payout_record_id)
+      if (!entry) continue
+      const amt = Number(t.amount) || 0
+      switch (t.transaction_type) {
+        case 'deposit_received':    entry.deposits_received += amt; break
+        case 'payment_to_business': entry.business_paid += amt;     break
+        case 'payment_to_worker':   entry.workers_paid += amt;      break
+        case 'payment_to_sales':    entry.sales_paid += amt;        break
+      }
+    }
+    return map
+  }, [records, allTransactions])
 
   async function loadTransactions(recordId: string) {
     setLoadingTxns(true)
@@ -495,6 +534,7 @@ export default function PayoutsPage() {
     const record: InsertTables<'payout_records'> = {
       deal_type: form.dealType,
       client_name: form.clientName,
+      client_id: selectedClientId,
       date: form.date,
       total_revenue: result.totalRevenue,
       business_amount: result.internalSplit.businessAmount,
@@ -526,6 +566,7 @@ export default function PayoutsPage() {
     } else {
       setSaveMessage('Payout record saved!')
       setForm(initialForm)
+      setSelectedClientId(null)
       setSalesPeople([newPerson()])
       setWorkers([newPerson()])
       loadRecords()
@@ -612,16 +653,16 @@ export default function PayoutsPage() {
             </select>
           </div>
 
-          <div className="form-group">
-            <label className="label">Client Name</label>
-            <input
-              className="input"
-              type="text"
-              value={form.clientName}
-              onChange={(e) => updateForm({ clientName: e.target.value })}
-              placeholder="Enter client or project name"
-            />
-          </div>
+          <ClientPicker
+            label="Client"
+            value={form.clientName}
+            clientId={selectedClientId}
+            onChange={(name, cid) => {
+              updateForm({ clientName: name })
+              setSelectedClientId(cid)
+            }}
+            placeholder="Search existing client or type a new name…"
+          />
 
           {form.dealType === 'grand_slam_monthly' && (
             <div className="grid grid-cols-2 gap-4">
@@ -1099,6 +1140,14 @@ export default function PayoutsPage() {
                             <h4 className="font-semibold" style={{ color: 'var(--foreground)' }}>
                               {r.client_name}
                             </h4>
+                            {r.client_id && (
+                              <span
+                                className="inline-flex items-center gap-1 text-[10px] px-1.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                title={`Linked to clients.${r.client_id}`}
+                              >
+                                linked
+                              </span>
+                            )}
                             <span className="badge-info text-xs">
                               {DEAL_TYPES[r.deal_type as DealType]?.label ?? r.deal_type}
                             </span>
@@ -1118,6 +1167,15 @@ export default function PayoutsPage() {
                             <span style={{ color: 'var(--success)' }}>B {fmt(r.business_amount)}</span>
                             {r.sales_amount > 0 && <span style={{ color: 'var(--accent)' }}>S {fmt(r.sales_amount)}</span>}
                             <span style={{ color: 'var(--warning)' }}>W {fmt(r.worker_amount)}</span>
+                          </div>
+                          <div className="mt-1.5 flex justify-end">
+                            <PayoutRecordStatusBadges
+                              totalRevenue={r.total_revenue}
+                              businessAmount={r.business_amount}
+                              salesAmount={r.sales_amount}
+                              workerAmount={r.worker_amount}
+                              reconciliation={reconciliationByRecord.get(r.id) ?? { deposits_received: 0, business_paid: 0, workers_paid: 0, sales_paid: 0 }}
+                            />
                           </div>
                         </div>
                         {/* Delete Button */}
