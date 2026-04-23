@@ -18,6 +18,7 @@ import {
 import type { PayoutRecord, PayoutTransaction, InsertTables } from '@/lib/supabase/types'
 import { ArrowLeft, Save, Filter, CheckCircle2, AlertTriangle, Plus, X, ChevronDown, ChevronRight, Trash2, Upload, FileText, Download, Loader2 } from 'lucide-react'
 import Link from 'next/link'
+import PayoutPeriodSummary from '@/components/financials/PayoutPeriodSummary'
 
 // --- Person entry type ---
 
@@ -547,6 +548,9 @@ export default function PayoutsPage() {
         <h1 className="page-title">Payout Operations</h1>
         <p className="page-description">Calculate revenue splits by deal type and save payout records. All splits are progressive (like tax brackets).</p>
       </div>
+
+      {/* PAY-PERIOD RECONCILIATION — who is owed what across all deals in the period */}
+      <PayoutPeriodSummary />
 
       {/* ALL PAYOUT CHARTS */}
       <div>
